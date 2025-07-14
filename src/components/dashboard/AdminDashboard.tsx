@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Users, BarChart3 } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { TaskFilters } from '../../types';
@@ -10,6 +10,7 @@ import TaskForm from './TaskForm';
 import TaskFiltersComponent from './TaskFilters';
 import LeaveCalendar from './LeaveCalendar';
 import DashboardStats from './DashboardStats';
+import MembersList from './MembersList';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -150,43 +151,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
 
   if (activeTab === 'team') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
-        </div>
-        
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card>
-            <div className="text-center">
-              <div className="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-6 h-6 text-blue-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Members</h3>
-              <p className="text-2xl font-bold text-blue-600">5</p>
-            </div>
-          </Card>
-          
-          <Card>
-            <div className="text-center">
-              <div className="bg-green-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                <BarChart3 className="w-6 h-6 text-green-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Active Tasks</h3>
-              <p className="text-2xl font-bold text-green-600">{tasks.filter(t => t.status === 'pending').length}</p>
-            </div>
-          </Card>
-          
-          <Card>
-            <div className="text-center">
-              <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-6 h-6 text-purple-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">On Leave Today</h3>
-              <p className="text-2xl font-bold text-purple-600">2</p>
-            </div>
-          </Card>
-        </div>
-      </div>
+      <MembersList />
     );
   }
 

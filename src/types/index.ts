@@ -1,11 +1,26 @@
-export interface User {
+export interface Member {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'member';
+  phone?: string;
+  department?: string;
+  hire_date?: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
+
+export interface Admin {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type User = Member | Admin;
 
 export interface Task {
   id: string;
@@ -16,7 +31,7 @@ export interface Task {
   status: 'pending' | 'completed' | 'blocked';
   created_at: string;
   updated_at: string;
-  user?: User;
+  user?: Member;
 }
 
 export interface Leave {
@@ -27,11 +42,11 @@ export interface Leave {
   reason: string;
   created_at: string;
   updated_at: string;
-  user?: User;
+  user?: Member;
 }
 
 export interface AuthContextType {
-  user: User | null;
+  user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | null;
   login: (email: string, password: string, role: 'admin' | 'member') => Promise<void>;
   logout: () => void;
   loading: boolean;

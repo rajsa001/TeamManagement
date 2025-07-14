@@ -20,7 +20,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ role, onBack }) => {
     try {
       await login(email, password, role);
     } catch (error) {
-      console.error('Login failed:', error);
+      alert(error instanceof Error ? error.message : 'Login failed');
     }
   };
 

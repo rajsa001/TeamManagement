@@ -74,6 +74,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSelectRole }) => {
               <p className="text-gray-600 mb-6">
                 Full control over team tasks, leaves, and member management
               </p>
+              <div className="text-xs text-gray-500 mb-4">
+                Demo: admin@company.com / password123
+              </div>
               <Button
                 onClick={() => onSelectRole('admin')}
                 className="w-full"
@@ -91,6 +94,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSelectRole }) => {
               <p className="text-gray-600 mb-6">
                 Manage your personal tasks and leave requests
               </p>
+              <div className="text-xs text-gray-500 mb-4">
+                Demo: john@company.com / password123
+              </div>
               <Button
                 onClick={() => onSelectRole('member')}
                 className="w-full"
