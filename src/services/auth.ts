@@ -195,6 +195,18 @@ export const authService = {
     if (error) throw new Error('Failed to delete admin');
   },
 
+  // Add password verification for admin
+  async verifyAdminPassword(adminId: string, password: string): Promise<boolean> {
+    // In production, use bcrypt.compare
+    const { data: admin, error } = await supabase
+      .from('admins')
+      .select('password_hash')
+      .eq('id', adminId)
+      .single();
+    if (error || !admin) return false;
+    return admin.password_hash === btoa(password);
+  },
+
   validateToken(token: string): boolean {
     try {
       const decoded = JSON.parse(atob(token));

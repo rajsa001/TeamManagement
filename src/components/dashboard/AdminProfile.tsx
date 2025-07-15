@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Button from '../ui/Button';
 import { User } from 'lucide-react';
+import { authService } from '../../services/auth';
 
 const AdminProfile: React.FC = () => {
   const { user, setUser } = useAuth();
@@ -14,6 +15,13 @@ const AdminProfile: React.FC = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    new: '',
+    confirm: '',
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +86,38 @@ const AdminProfile: React.FC = () => {
     } else {
       console.error('[DEBUG] AdminProfile: update error', error);
       alert('Failed to update profile: ' + error.message);
+    }
+  };
+
+  // Add real password update handler
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    if (passwordForm.new !== passwordForm.confirm) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    setPasswordLoading(true);
+    // Verify current password
+    const ok = await authService.verifyAdminPassword(user.id, passwordForm.current);
+    if (!ok) {
+      setPasswordError('Current password is incorrect.');
+      setPasswordLoading(false);
+      return;
+    }
+    // Hash new password and update
+    const password_hash = btoa(passwordForm.new); // In production, use bcrypt
+    const { error } = await supabase
+      .from('admins')
+      .update({ password_hash })
+      .eq('id', user.id);
+    setPasswordLoading(false);
+    if (!error) {
+      setPasswordForm({ current: '', new: '', confirm: '' });
+      setEditMode(false);
+      alert('Password updated successfully.');
+    } else {
+      setPasswordError('Failed to update password: ' + error.message);
     }
   };
 

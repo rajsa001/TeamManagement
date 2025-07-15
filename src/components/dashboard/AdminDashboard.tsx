@@ -19,6 +19,7 @@ import Modal from '../ui/Modal';
 import { supabase } from '../../lib/supabase';
 import { Task } from '../../types';
 import { Project } from '../../types';
+import { authService } from '../../services/auth';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -93,6 +94,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   });
   const [profileLoading, setProfileLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   // Profile update handler
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -212,7 +214,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                 <div className="text-gray-500">No recently completed tasks.</div>
               ) : (
                 recentlyCompletedTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="completed" />
                 ))
               )}
             </div>
@@ -224,7 +226,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                 <div className="text-gray-500">No tasks due today.</div>
               ) : (
                 dueTodayTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="today" />
                 ))
               )}
             </div>
@@ -236,7 +238,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                 <div className="text-gray-500">No upcoming tasks.</div>
               ) : (
                 upcomingTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="upcoming" />
                 ))
               )}
             </div>
@@ -248,7 +250,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                 <div className="text-gray-500">No blocked tasks.</div>
               ) : (
                 blockedTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="blocked" />
                 ))
               )}
             </div>
@@ -609,7 +611,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
         </Modal>
         {/* Change Password Modal */}
         <Modal isOpen={changePasswordOpen} onClose={() => setChangePasswordOpen(false)} title="Change Password">
-          <form onSubmit={handlePasswordUpdate} className="space-y-4">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setPasswordError('');
+              if (passwordForm.new !== passwordForm.confirm) {
+                setPasswordError('New passwords do not match.');
+                return;
+              }
+              setPasswordLoading(true);
+              if (!user) {
+                setPasswordError('User not found.');
+                setPasswordLoading(false);
+                return;
+              }
+              const ok = await authService.verifyAdminPassword(user.id, passwordForm.current);
+              if (!ok) {
+                setPasswordError('Current password is incorrect.');
+                setPasswordLoading(false);
+                return;
+              }
+              const password_hash = btoa(passwordForm.new);
+              const { error } = await supabase
+                .from('admins')
+                .update({ password_hash })
+                .eq('id', user.id);
+              setPasswordLoading(false);
+              if (!error) {
+                setPasswordForm({ current: '', new: '', confirm: '' });
+                setChangePasswordOpen(false);
+                alert('Password updated successfully.');
+              } else {
+                setPasswordError('Failed to update password: ' + error.message);
+              }
+            }}
+            className="space-y-4"
+          >
+            {passwordError && <div className="p-2 bg-red-100 text-red-700 rounded">{passwordError}</div>}
             <input
               className="w-full border rounded px-3 py-2"
               type="password"

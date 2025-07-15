@@ -13,6 +13,7 @@ interface TaskCardProps {
   onStatusChange: (id: string, status: Task['status']) => void;
   onUpdate?: (id: string, updates: Partial<Task>) => void;
   showUser?: boolean;
+  section?: 'completed' | 'today' | 'upcoming' | 'blocked'; // NEW
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
@@ -20,7 +21,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onDelete, 
   onStatusChange, 
   onUpdate,
-  showUser = false 
+  showUser = false,
+  section // NEW
 }) => {
   const { user } = useAuth();
   const isOverdue = new Date(task.due_date) < new Date() && task.status !== 'completed';
@@ -66,8 +68,27 @@ const TaskCard: React.FC<TaskCardProps> = ({
     setIsEditOpen(false);
   };
 
+  // Section-based border gradient
+  let borderClass = '';
+  switch (section) {
+    case 'completed':
+      borderClass = 'border-2 border-green-400 bg-gradient-to-br from-green-50 to-green-100';
+      break;
+    case 'today':
+      borderClass = 'border-2 border-orange-400 bg-gradient-to-br from-orange-50 to-orange-100';
+      break;
+    case 'upcoming':
+      borderClass = 'border-2 border-blue-400 bg-gradient-to-br from-blue-50 to-blue-100';
+      break;
+    case 'blocked':
+      borderClass = 'border-2 border-red-400 bg-gradient-to-br from-red-50 to-red-100';
+      break;
+    default:
+      borderClass = '';
+  }
+
   return (
-    <Card className={`${isOverdue ? 'border-red-200 bg-red-50' : ''}`} hover>
+    <Card className={`${borderClass} ${isOverdue && !section ? 'border-red-200 bg-red-50' : ''}`} hover>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           <h3 className="font-semibold text-gray-900 mb-1">{task.task_name}</h3>
