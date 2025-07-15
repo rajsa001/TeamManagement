@@ -166,50 +166,91 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   };
 
   if (activeTab === 'dashboard') {
+    // Date helpers
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isSameDay = (d1: Date, d2: Date) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+
+    // Recently Completed: completed within last 3 days
+    const recentlyCompletedTasks = tasks.filter(task => {
+      if (task.status !== 'completed' || !task.updated_at) return false;
+      const updated = new Date(task.updated_at);
+      const diff = (today.getTime() - updated.setHours(0,0,0,0)) / (1000 * 60 * 60 * 24);
+      return diff <= 3 && diff >= 0;
+    });
+
+    // Due Today: due date is today
+    const dueTodayTasks = tasks.filter(task => {
+      const due = new Date(task.due_date);
+      return isSameDay(due, today);
+    });
+
+    // Upcoming: due date is within next 3 days (excluding today)
+    const upcomingTasks = tasks.filter(task => {
+      const due = new Date(task.due_date);
+      const diff = (due.setHours(0,0,0,0) - today.getTime()) / (1000 * 60 * 60 * 24);
+      return diff > 0 && diff <= 3;
+    });
+
+    // Blocked: overdue and not completed
+    const blockedTasks = tasks.filter(task => {
+      const due = new Date(task.due_date);
+      return due < today && task.status !== 'completed';
+    });
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
         </div>
-        
         <DashboardStats tasks={tasks} leaves={leaves} />
-        
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Tasks</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recently Completed Tasks</h2>
             <div className="space-y-4">
-              {tasks.slice(0, 3).map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onDelete={deleteTask}
-                  onStatusChange={handleStatusChange}
-                  showUser={true}
-                />
-              ))}
+              {recentlyCompletedTasks.length === 0 ? (
+                <div className="text-gray-500">No recently completed tasks.</div>
+              ) : (
+                recentlyCompletedTasks.map(task => (
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                ))
+              )}
             </div>
           </div>
-          
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Leave Requests</h2>
-            <div className="space-y-2">
-              {leaves.slice(0, 3).map(leave => (
-                <div key={leave.id} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {leave.user?.name || 'Unknown User'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(leave.leave_date).toLocaleDateString()} - {leave.leave_type}
-                      </p>
-                    </div>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {leave.leave_type}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Due Today</h2>
+            <div className="space-y-4">
+              {dueTodayTasks.length === 0 ? (
+                <div className="text-gray-500">No tasks due today.</div>
+              ) : (
+                dueTodayTasks.map(task => (
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                ))
+              )}
+            </div>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Tasks</h2>
+            <div className="space-y-4">
+              {upcomingTasks.length === 0 ? (
+                <div className="text-gray-500">No upcoming tasks.</div>
+              ) : (
+                upcomingTasks.map(task => (
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                ))
+              )}
+            </div>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Blocked Tasks</h2>
+            <div className="space-y-4">
+              {blockedTasks.length === 0 ? (
+                <div className="text-gray-500">No blocked tasks.</div>
+              ) : (
+                blockedTasks.map(task => (
+                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} />
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -605,6 +646,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
 
   // Add admin management tab for admin
   if (activeTab === 'admin-management') {
+    // Only Super-Admin can see this section
+    if (!user || user.name !== 'Super-Admin' || user.email !== 'admin1@company.com') {
+      return (
+        <div className="p-8 text-center text-gray-500">You do not have access to this section.</div>
+      );
+    }
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
