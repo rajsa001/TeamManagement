@@ -4,7 +4,8 @@ import {
   CheckSquare, 
   Calendar, 
   Users, 
-  BarChart3 
+  BarChart3,
+  UserPlus
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -20,6 +21,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tasks', label: 'My Tasks', icon: CheckSquare },
     { id: 'leaves', label: 'My Leaves', icon: Calendar },
+    { id: 'projects', label: 'Projects', icon: BarChart3 },
   ];
 
   const adminTabs = [
@@ -28,6 +30,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
     { id: 'leaves', label: 'All Leaves', icon: Calendar },
     { id: 'team', label: 'Team', icon: Users },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'projects', label: 'Projects', icon: BarChart3 },
+    { id: 'profile', label: 'Profile', icon: Users },
+    { id: 'admin-management', label: 'Admin Management', icon: UserPlus },
   ];
 
   const tabs = user?.role === 'admin' ? adminTabs : memberTabs;

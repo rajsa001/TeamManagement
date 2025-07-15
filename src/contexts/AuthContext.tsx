@@ -23,13 +23,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string, role: 'admin' | 'member') => {
     setLoading(true);
     try {
-      let response;
-      if (role === 'admin') {
-        response = await authService.loginAdmin(email, password);
-      } else {
-        response = await authService.loginMember(email, password);
-      }
-
+      const response = await authService.loginUser(email, password, role);
       setUser(response.user);
       localStorage.setItem('user', JSON.stringify(response.user));
       localStorage.setItem('token', response.token);

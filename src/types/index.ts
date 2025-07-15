@@ -22,16 +22,29 @@ export interface Admin {
 
 export type User = Member | Admin;
 
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  client_name?: string;
+  start_date?: string;
+  expected_end_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Task {
   id: string;
   user_id: string;
   task_name: string;
   description: string;
   due_date: string;
-  status: 'pending' | 'completed' | 'blocked';
+  status: 'not_started' | 'in_progress' | 'completed';
   created_at: string;
   updated_at: string;
   user?: Member;
+  project_id?: string;
+  project?: Project;
 }
 
 export interface Leave {
@@ -53,7 +66,7 @@ export interface AuthContextType {
 }
 
 export interface TaskFilters {
-  status?: 'pending' | 'completed' | 'blocked';
+  status?: 'not_started' | 'in_progress' | 'completed';
   member?: string;
   dueDateSort?: 'asc' | 'desc';
 }

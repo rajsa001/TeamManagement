@@ -7,64 +7,42 @@ export interface LoginResponse {
 }
 
 export const authService = {
-  async loginMember(email: string, password: string): Promise<LoginResponse> {
+  async loginUser(email: string, password: string, role: 'admin' | 'member'): Promise<LoginResponse> {
     try {
-      // For demo purposes, we'll use simple password comparison
-      // In production, you'd hash the password and compare with stored hash
-      const { data: member, error } = await supabase
-        .from('members')
-        .select('*')
-        .eq('email', email)
-        .eq('is_active', true)
-        .single();
+      let user, error;
+      if (role === 'admin') {
+        ({ data: user, error } = await supabase
+          .from('admins')
+          .select('*')
+          .eq('email', email)
+          .eq('is_active', true)
+          .single());
+      } else {
+        ({ data: user, error } = await supabase
+          .from('members')
+          .select('*')
+          .eq('email', email)
+          .eq('is_active', true)
+          .single());
+      }
 
-      if (error || !member) {
+      if (error || !user) {
         throw new Error('Invalid email or password');
       }
 
-      // In production, use bcrypt to compare password with hash
-      // For demo, we'll accept any password
+      // For demo: accept any password with at least 6 characters
       if (password.length < 6) {
         throw new Error('Invalid email or password');
       }
 
       // Create a simple token (in production, use JWT)
-      const token = btoa(JSON.stringify({ id: member.id, role: 'member', exp: Date.now() + 24 * 60 * 60 * 1000 }));
+      const token = btoa(
+        JSON.stringify({ id: user.id, role: role, exp: Date.now() + 24 * 60 * 60 * 1000 })
+      );
 
       return {
-        user: { ...member, role: 'member' as const },
-        token
-      };
-    } catch (error) {
-      throw new Error('Login failed. Please check your credentials.');
-    }
-  },
-
-  async loginAdmin(email: string, password: string): Promise<LoginResponse> {
-    try {
-      const { data: admin, error } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('email', email)
-        .eq('is_active', true)
-        .single();
-
-      if (error || !admin) {
-        throw new Error('Invalid email or password');
-      }
-
-      // In production, use bcrypt to compare password with hash
-      // For demo, we'll accept any password
-      if (password.length < 6) {
-        throw new Error('Invalid email or password');
-      }
-
-      // Create a simple token (in production, use JWT)
-      const token = btoa(JSON.stringify({ id: admin.id, role: 'admin', exp: Date.now() + 24 * 60 * 60 * 1000 }));
-
-      return {
-        user: { ...admin, role: 'admin' as const },
-        token
+        user: { ...user, role: role },
+        token,
       };
     } catch (error) {
       throw new Error('Login failed. Please check your credentials.');
@@ -112,6 +90,25 @@ export const authService = {
     }
   },
 
+  async updateMember(id: string, updates: Partial<Member>): Promise<Member> {
+    const { data, error } = await supabase
+      .from('members')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new Error('Failed to update member');
+    return data;
+  },
+
+  async deleteMember(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('members')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error('Failed to delete member');
+  },
+
   async getMembers(): Promise<Member[]> {
     try {
       const { data: members, error } = await supabase
@@ -128,6 +125,74 @@ export const authService = {
     } catch (error) {
       throw new Error('Failed to fetch members');
     }
+  },
+
+  async getAdmins(): Promise<Admin[]> {
+    try {
+      const { data: admins, error } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (error) {
+        throw new Error('Failed to fetch admins');
+      }
+      return admins || [];
+    } catch (error) {
+      throw new Error('Failed to fetch admins');
+    }
+  },
+
+  async createAdmin(adminData: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+  }): Promise<Admin> {
+    try {
+      const password_hash = btoa(adminData.password); // Simple encoding for demo
+      const { data: admin, error } = await supabase
+        .from('admins')
+        .insert({
+          name: adminData.name,
+          email: adminData.email,
+          password_hash,
+          phone: adminData.phone,
+        })
+        .select()
+        .single();
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('Email already exists');
+        }
+        throw new Error('Failed to create admin');
+      }
+      return admin;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to create admin');
+    }
+  },
+
+  async updateAdmin(id: string, updates: Partial<Admin>): Promise<Admin> {
+    const { data, error } = await supabase
+      .from('admins')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new Error('Failed to update admin');
+    return data;
+  },
+
+  async deleteAdmin(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('admins')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error('Failed to delete admin');
   },
 
   validateToken(token: string): boolean {

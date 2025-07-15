@@ -11,17 +11,31 @@ import TaskFiltersComponent from './TaskFilters';
 import LeaveCalendar from './LeaveCalendar';
 import DashboardStats from './DashboardStats';
 import MembersList from './MembersList';
+import AdminsList from './AdminsList';
+import { useAuth } from '../../contexts/AuthContext';
+import ProjectCard from './ProjectCard';
+import { useProjects } from '../../hooks/useProjects';
+import Modal from '../ui/Modal';
 
 interface AdminDashboardProps {
   activeTab: string;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
-  const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, filterTasks } = useTasks();
+  const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks } = useTasks();
   const { leaves, loading: leavesLoading, addLeave, deleteLeave } = useLeaves();
+  const { projects, loading: projectsLoading, error: projectsError, addProject } = useProjects();
   
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
+  const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
+  const [projectForm, setProjectForm] = useState({
+    name: '',
+    description: '',
+    client_name: '',
+    start_date: '',
+    expected_end_date: ''
+  });
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -99,6 +113,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           onFiltersChange={setTaskFilters}
           showMemberFilter={true}
         />
+
+        {tasksError && (
+          <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">
+            {tasksError}
+          </div>
+        )}
 
         {tasksLoading ? (
           <div className="text-center py-8">
@@ -199,6 +219,118 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
             </div>
           </Card>
         </div>
+      </div>
+    );
+  }
+
+  if (activeTab === 'projects') {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
+          <Button icon={Plus} onClick={() => setIsProjectFormOpen(true)}>
+            Add Project
+          </Button>
+        </div>
+        {projectsError && <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">{projectsError}</div>}
+        {projectsLoading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {projects.map(project => {
+              const projectTasks = tasks.filter(task => task.project_id === project.id);
+              return (
+                <ProjectCard key={project.id} project={project} isAdmin tasks={projectTasks} />
+              );
+            })}
+          </div>
+        )}
+        <Modal isOpen={isProjectFormOpen} onClose={() => setIsProjectFormOpen(false)} title="Add Project">
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              addProject(projectForm);
+              setIsProjectFormOpen(false);
+              setProjectForm({ name: '', description: '', client_name: '', start_date: '', expected_end_date: '' });
+            }}
+            className="space-y-4"
+          >
+            <input
+              className="w-full border rounded px-3 py-2"
+              placeholder="Project Name"
+              value={projectForm.name}
+              onChange={e => setProjectForm(f => ({ ...f, name: e.target.value }))}
+              required
+            />
+            <input
+              className="w-full border rounded px-3 py-2"
+              placeholder="Client Name"
+              value={projectForm.client_name}
+              onChange={e => setProjectForm(f => ({ ...f, client_name: e.target.value }))}
+            />
+            <textarea
+              className="w-full border rounded px-3 py-2"
+              placeholder="Description"
+              value={projectForm.description}
+              onChange={e => setProjectForm(f => ({ ...f, description: e.target.value }))}
+            />
+            <input
+              className="w-full border rounded px-3 py-2"
+              type="date"
+              placeholder="Start Date"
+              value={projectForm.start_date}
+              onChange={e => setProjectForm(f => ({ ...f, start_date: e.target.value }))}
+            />
+            <input
+              className="w-full border rounded px-3 py-2"
+              type="date"
+              placeholder="Expected End Date"
+              value={projectForm.expected_end_date}
+              onChange={e => setProjectForm(f => ({ ...f, expected_end_date: e.target.value }))}
+            />
+            <Button type="submit">Add Project</Button>
+          </form>
+        </Modal>
+      </div>
+    );
+  }
+
+  // Add profile tab for admin
+  if (activeTab === 'profile') {
+    const { user } = useAuth();
+    if (!user || user.role !== 'admin') return null;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Admin Profile</h1>
+        </div>
+        <Card className="max-w-md mx-auto p-6">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="bg-blue-100 w-20 h-20 rounded-full flex items-center justify-center mb-2">
+              <span className="text-3xl font-bold text-blue-600">{user.name.charAt(0)}</span>
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900">{user.name}</h2>
+            <div className="text-gray-700">{user.email}</div>
+            {user.phone && <div className="text-gray-700">Phone: {user.phone}</div>}
+            <div className="text-gray-700">Status: <span className={user.is_active ? 'text-green-600' : 'text-red-600'}>{user.is_active ? 'Active' : 'Inactive'}</span></div>
+            <div className="text-gray-500 text-sm">Created: {new Date(user.created_at).toLocaleDateString()}</div>
+            <div className="text-gray-500 text-sm">Updated: {new Date(user.updated_at).toLocaleDateString()}</div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Add admin management tab for admin
+  if (activeTab === 'admin-management') {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Admin Management</h1>
+        </div>
+        <AdminsList />
       </div>
     );
   }

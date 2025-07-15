@@ -1,64 +1,124 @@
 import { useState, useEffect } from 'react';
 import { Leave, LeaveFilters } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export const useLeaves = () => {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
-
-  // Mock data
-  const mockLeaves: Leave[] = [
-    {
-      id: '1',
-      user_id: '1',
-      leave_date: '2025-01-25',
-      leave_type: 'casual',
-      reason: 'Family vacation',
-      created_at: '2025-01-10T10:00:00Z',
-      updated_at: '2025-01-10T10:00:00Z',
-      user: { id: '1', name: 'John Doe', email: 'john@company.com', role: 'member', created_at: '', updated_at: '' }
-    },
-    {
-      id: '2',
-      user_id: '2',
-      leave_date: '2025-02-14',
-      leave_type: 'sick',
-      reason: 'Medical appointment',
-      created_at: '2025-01-08T14:30:00Z',
-      updated_at: '2025-01-08T14:30:00Z',
-      user: { id: '2', name: 'Jane Smith', email: 'jane@company.com', role: 'member', created_at: '', updated_at: '' }
-    }
-  ];
 
   useEffect(() => {
     const loadLeaves = async () => {
       setLoading(true);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      if (user?.role === 'admin') {
-        setLeaves(mockLeaves);
+      let query = supabase
+        .from('leaves')
+        .select('*');
+      if (user?.role !== 'admin') {
+        query = query.eq('user_id', user?.id);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error fetching leaves:', error);
+        setLeaves([]);
       } else {
-        setLeaves(mockLeaves.filter(leave => leave.user_id === user?.id));
+        console.log('Fetched leaves:', data);
+        setLeaves(data || []);
       }
       setLoading(false);
     };
-
-    loadLeaves();
+    if (user) loadLeaves();
   }, [user]);
 
-  const addLeave = async (leaveData: Omit<Leave, 'id' | 'created_at' | 'updated_at'>) => {
-    const newLeave: Leave = {
+  const addLeave = async (leaveData: Omit<Leave, 'id' | 'created_at' | 'updated_at' | 'user'>) => {
+    setError(null);
+    // Log the payload for debugging
+    const payload = {
       ...leaveData,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString(),
+      end_date: leaveData.end_date === '' ? null : leaveData.end_date,
+    };
+    delete payload.id; // Ensure id is not sent for insert
+    console.log('Attempting to add leave with payload:', payload);
+    const { data, error } = await supabase
+      .from('leaves')
+      .insert([payload])
+      .select('*')
+      .single();
+    if (error) {
+      setError(error.message || 'Error adding leave');
+      console.error('Error adding leave:', error);
+      return false;
+    }
+    if (data) {
+      setLeaves(prev => [data, ...prev]);
+      // Send webhook to n8n automation for leave added (to both URLs)
+      try {
+        await fetch('https://n8nautomation.site/webhook-test/onleaveadded', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...data,
+            member_email: user?.email || '',
+          }),
+        });
+        await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...data,
+            member_email: user?.email || '',
+            event: 'leave-added',
+          }),
+        });
+      } catch (webhookError) {
+        console.error('Failed to send leave added webhook:', webhookError);
+      }
+      return true;
+    }
+    setError('Unknown error adding leave');
+    return false;
+  };
+
+  const updateLeave = async (id: string, updates: Partial<Leave>) => {
+    const payload = {
+      ...updates,
+      end_date: updates.end_date === '' ? null : updates.end_date,
       updated_at: new Date().toISOString(),
     };
-    setLeaves(prev => [...prev, newLeave]);
+    const { data, error } = await supabase
+      .from('leaves')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) {
+      console.error('Error updating leave:', error);
+    }
+    if (data) {
+      setLeaves(prev => prev.map(leave => (leave.id === id ? data : leave)));
+      // Send webhook to n8n automation for leave updated
+      try {
+        await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...data,
+            member_email: user?.email || '',
+            event: 'leave-updated',
+          }),
+        });
+      } catch (webhookError) {
+        console.error('Failed to send leave updated webhook:', webhookError);
+      }
+    }
   };
 
   const deleteLeave = async (id: string) => {
+    const { error } = await supabase.from('leaves').delete().eq('id', id);
+    if (error) {
+      console.error('Error deleting leave:', error);
+    }
     setLeaves(prev => prev.filter(leave => leave.id !== id));
   };
 
@@ -78,7 +138,9 @@ export const useLeaves = () => {
   return {
     leaves,
     loading,
+    error,
     addLeave,
+    updateLeave,
     deleteLeave,
     filterLeaves,
   };

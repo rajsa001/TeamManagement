@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Task } from '../../types';
+import { Task, Member } from '../../types';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import { authService } from '../../services/auth';
+import { useProjects } from '../../hooks/useProjects';
 
 interface TaskFormProps {
   isOpen: boolean;
@@ -17,19 +19,53 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
     description: '',
     due_date: '',
     user_id: user?.id || '',
+    project_id: ''
   });
+  const [members, setMembers] = useState<Member[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState('');
+  const { projects, loading: projectsLoading } = useProjects();
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      setMembersLoading(true);
+      setMembersError('');
+      authService.getMembers()
+        .then(data => {
+          setMembers(data);
+          // If modal is open and user_id is empty, set to first member's ID
+          if (isOpen && data.length > 0 && !formData.user_id) {
+            setFormData(prev => ({ ...prev, user_id: data[0].id }));
+          }
+          console.log('Fetched members:', data);
+        })
+        .catch(err => {
+          setMembersError('Failed to load members');
+          setMembers([]);
+        })
+        .finally(() => setMembersLoading(false));
+    }
+  }, [user, isOpen]);
+
+  useEffect(() => {
+    if (isOpen && user?.role === 'member') {
+      setFormData(prev => ({ ...prev, user_id: user.id }));
+    }
+  }, [isOpen, user]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
+    const baseTask = {
       ...formData,
       status: 'pending' as const,
-    });
-    setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '' });
+      created_by: user?.id || '',
+    };
+    onSubmit(baseTask);
+    setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '' });
     onClose();
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
@@ -79,6 +115,56 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
+        </div>
+
+        {user?.role === 'admin' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Assign To
+            </label>
+            {membersLoading ? (
+              <div className="text-sm text-gray-500">Loading members...</div>
+            ) : membersError ? (
+              <div className="text-sm text-red-500">{membersError}</div>
+            ) : members.length === 0 ? (
+              <div className="text-sm text-gray-500">No members found. Please add members first.</div>
+            ) : (
+              <select
+                name="user_id"
+                value={formData.user_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select Member</option>
+                {members.map(member => (
+                  <option key={member.id} value={member.id}>{member.name} ({member.email})</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Project
+          </label>
+          {projectsLoading ? (
+            <div className="text-sm text-gray-500">Loading projects...</div>
+          ) : (
+            <select
+              name="project_id"
+              value={formData.project_id}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Select Project</option>
+              {projects.map(project => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex justify-end space-x-3 pt-4">

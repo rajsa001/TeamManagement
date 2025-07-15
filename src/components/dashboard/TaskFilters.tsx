@@ -36,9 +36,9 @@ const TaskFiltersComponent: React.FC<TaskFiltersProps> = ({
           className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">All Status</option>
-          <option value="pending">Pending</option>
+          <option value="not_started">Not Started</option>
+          <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
-          <option value="blocked">Blocked</option>
         </select>
       </div>
 

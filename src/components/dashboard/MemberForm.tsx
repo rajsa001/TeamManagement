@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, Building, Calendar } from 'lucide-react';
 import { authService } from '../../services/auth';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import { Member } from '../../types';
 
 interface MemberFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialData?: Partial<Member>;
 }
 
-const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) => {
+const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, initialData }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -22,13 +24,17 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      await authService.createMember(formData);
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name || '',
+        email: initialData.email || '',
+        password: '',
+        phone: initialData.phone || '',
+        department: initialData.department || '',
+        hire_date: initialData.hire_date || '',
+      });
+    } else {
       setFormData({
         name: '',
         email: '',
@@ -37,10 +43,29 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
         department: '',
         hire_date: '',
       });
+    }
+  }, [initialData, isOpen]);
+
+  const isEdit = !!initialData;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      if (isEdit && initialData?.id) {
+        // Don't send password if blank
+        const updates: any = { ...formData };
+        delete updates.password;
+        if (!formData.password) delete updates.password;
+        await authService.updateMember(initialData.id, updates);
+      } else {
+        await authService.createMember(formData);
+      }
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create member');
+      setError(err instanceof Error ? err.message : 'Failed to save member');
     } finally {
       setLoading(false);
     }
@@ -65,14 +90,13 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
   ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add New Team Member" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Team Member' : 'Add New Team Member'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
           </div>
         )}
-
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -90,7 +114,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
               />
             </div>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Email Address *
@@ -104,27 +127,28 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
                 onChange={handleChange}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                disabled={isEdit}
               />
             </div>
           </div>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Password *
-          </label>
-          <input
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            minLength={6}
-            required
-          />
-          <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
-        </div>
-
+        {!isEdit && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password *
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              minLength={6}
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+          </div>
+        )}
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -141,7 +165,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
               />
             </div>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Department
@@ -162,7 +185,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
             </div>
           </div>
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Hire Date
@@ -178,13 +200,12 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess }) =
             />
           </div>
         </div>
-
         <div className="flex justify-end space-x-3 pt-4">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
           <Button type="submit" loading={loading}>
-            Create Member
+            {isEdit ? 'Update Member' : 'Create Member'}
           </Button>
         </div>
       </form>
