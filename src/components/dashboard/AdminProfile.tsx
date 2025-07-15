@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import Button from '../ui/Button';
 import { User } from 'lucide-react';
 import { authService } from '../../services/auth';
+import Modal from '../ui/Modal';
 
 const AdminProfile: React.FC = () => {
   const { user, setUser } = useAuth();
@@ -22,6 +23,7 @@ const AdminProfile: React.FC = () => {
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,8 +139,11 @@ const AdminProfile: React.FC = () => {
         <div>
           <div className="text-xl font-bold text-gray-900">{user.name}</div>
           <div className="text-gray-600">{user.email}</div>
-          <Button variant="primary" className="mt-2" onClick={() => setEditMode(!editMode)}>
+          <Button variant="primary" className="mt-2 mr-2" onClick={() => setEditMode(!editMode)}>
             {editMode ? 'Cancel' : 'Edit Profile'}
+          </Button>
+          <Button variant="outline" className="mt-2" onClick={() => setChangePasswordOpen(true)}>
+            Change Password
           </Button>
         </div>
       </div>
@@ -204,6 +209,71 @@ const AdminProfile: React.FC = () => {
           </div>
         </form>
       )}
+
+      {/* Change Password Modal */}
+      <Modal isOpen={changePasswordOpen} onClose={() => setChangePasswordOpen(false)} title="Change Password">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setPasswordError('');
+            if (passwordForm.new !== passwordForm.confirm) {
+              setPasswordError('New passwords do not match.');
+              return;
+            }
+            setPasswordLoading(true);
+            const ok = await authService.verifyAdminPassword(user.id, passwordForm.current);
+            if (!ok) {
+              setPasswordError('Current password is incorrect.');
+              setPasswordLoading(false);
+              return;
+            }
+            const password_hash = btoa(passwordForm.new);
+            const { error } = await supabase
+              .from('admins')
+              .update({ password_hash })
+              .eq('id', user.id);
+            setPasswordLoading(false);
+            if (!error) {
+              setPasswordForm({ current: '', new: '', confirm: '' });
+              setChangePasswordOpen(false);
+              alert('Password updated successfully.');
+            } else {
+              setPasswordError('Failed to update password: ' + error.message);
+            }
+          }}
+          className="space-y-4"
+        >
+          {passwordError && <div className="p-2 bg-red-100 text-red-700 rounded">{passwordError}</div>}
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="password"
+            placeholder="Current Password"
+            value={passwordForm.current}
+            onChange={e => setPasswordForm(f => ({ ...f, current: e.target.value }))}
+            required
+          />
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="password"
+            placeholder="New Password"
+            value={passwordForm.new}
+            onChange={e => setPasswordForm(f => ({ ...f, new: e.target.value }))}
+            required
+          />
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="password"
+            placeholder="Confirm New Password"
+            value={passwordForm.confirm}
+            onChange={e => setPasswordForm(f => ({ ...f, confirm: e.target.value }))}
+            required
+          />
+          <div className="flex space-x-2 justify-end">
+            <Button variant="outline" onClick={() => setChangePasswordOpen(false)} type="button">Cancel</Button>
+            <Button variant="primary" type="submit" disabled={passwordLoading}>{passwordLoading ? 'Saving...' : 'Save'}</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
