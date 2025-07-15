@@ -33,5 +33,23 @@ export function useProjects() {
     }
   };
 
-  return { projects, loading, error, addProject, fetchProjects };
+  const updateProject = async (id: string, updates: Partial<Project>) => {
+    try {
+      const updated = await projectService.updateProject(id, updates);
+      setProjects(prev => prev.map(p => (p.id === id ? updated : p)));
+    } catch (err) {
+      setError('Failed to update project');
+    }
+  };
+
+  const deleteProject = async (id: string) => {
+    try {
+      await projectService.deleteProject(id);
+      setProjects(prev => prev.filter(p => p.id !== id));
+    } catch (err) {
+      setError('Failed to delete project');
+    }
+  };
+
+  return { projects, loading, error, addProject, updateProject, deleteProject, fetchProjects };
 } 

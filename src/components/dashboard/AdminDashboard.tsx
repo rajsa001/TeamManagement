@@ -18,6 +18,7 @@ import { useProjects } from '../../hooks/useProjects';
 import Modal from '../ui/Modal';
 import { supabase } from '../../lib/supabase';
 import { Task } from '../../types';
+import { Project } from '../../types';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -26,7 +27,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
   const { leaves, loading: leavesLoading, addLeave, deleteLeave, updateLeave } = useLeaves();
-  const { projects, loading: projectsLoading, error: projectsError, addProject } = useProjects();
+  const { projects, loading: projectsLoading, error: projectsError, addProject, updateProject, deleteProject, fetchProjects } = useProjects();
   
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
@@ -131,6 +132,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   // Fix: Wrap addTask for TaskForm to match expected signature
   const handleAddTask = async (task: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => {
     await addTask(task as any); // 'as any' to satisfy the type, since addTask expects created_by
+  };
+
+  const [editProject, setEditProject] = useState<Project | null>(null);
+  const [editProjectForm, setEditProjectForm] = useState({
+    name: '',
+    description: '',
+    client_name: '',
+    start_date: '',
+    expected_end_date: ''
+  });
+
+  const handleEditProject = (project: Project) => {
+    setEditProject(project);
+    setEditProjectForm({
+      name: project.name,
+      description: project.description || '',
+      client_name: project.client_name || '',
+      start_date: project.start_date || '',
+      expected_end_date: project.expected_end_date || ''
+    });
+  };
+
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editProject) return;
+    await updateProject(editProject.id, editProjectForm);
+    setEditProject(null);
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    await deleteProject(id);
   };
 
   if (activeTab === 'dashboard') {
@@ -355,7 +387,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                   project={project}
                   isAdmin
                   tasks={projectTasks}
-                  onDelete={deleteTask}
+                  onEdit={handleEditProject}
+                  onDelete={handleDeleteProject}
                   onStatusChange={handleStatusChange}
                   onUpdate={handleTaskUpdate}
                 />
@@ -373,40 +406,113 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
             }}
             className="space-y-4"
           >
-            <input
-              className="w-full border rounded px-3 py-2"
-              placeholder="Project Name"
-              value={projectForm.name}
-              onChange={e => setProjectForm(f => ({ ...f, name: e.target.value }))}
-              required
-            />
-            <input
-              className="w-full border rounded px-3 py-2"
-              placeholder="Client Name"
-              value={projectForm.client_name}
-              onChange={e => setProjectForm(f => ({ ...f, client_name: e.target.value }))}
-            />
-            <textarea
-              className="w-full border rounded px-3 py-2"
-              placeholder="Description"
-              value={projectForm.description}
-              onChange={e => setProjectForm(f => ({ ...f, description: e.target.value }))}
-            />
-            <input
-              className="w-full border rounded px-3 py-2"
-              type="date"
-              placeholder="Start Date"
-              value={projectForm.start_date}
-              onChange={e => setProjectForm(f => ({ ...f, start_date: e.target.value }))}
-            />
-            <input
-              className="w-full border rounded px-3 py-2"
-              type="date"
-              placeholder="Expected End Date"
-              value={projectForm.expected_end_date}
-              onChange={e => setProjectForm(f => ({ ...f, expected_end_date: e.target.value }))}
-            />
-            <Button type="submit">Add Project</Button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                placeholder="Project Name"
+                value={projectForm.name}
+                onChange={e => setProjectForm(f => ({ ...f, name: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                placeholder="Client Name"
+                value={projectForm.client_name}
+                onChange={e => setProjectForm(f => ({ ...f, client_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                className="w-full border rounded px-3 py-2"
+                placeholder="Description"
+                value={projectForm.description}
+                onChange={e => setProjectForm(f => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                type="date"
+                placeholder="Start Date"
+                value={projectForm.start_date}
+                onChange={e => setProjectForm(f => ({ ...f, start_date: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expected End Date</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                type="date"
+                placeholder="Expected End Date"
+                value={projectForm.expected_end_date}
+                onChange={e => setProjectForm(f => ({ ...f, expected_end_date: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit">Add Project</Button>
+            </div>
+          </form>
+        </Modal>
+        {/* Edit Project Modal */}
+        <Modal isOpen={!!editProject} onClose={() => setEditProject(null)} title="Edit Project">
+          <form onSubmit={handleUpdateProject} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                placeholder="Project Name"
+                value={editProjectForm.name}
+                onChange={e => setEditProjectForm(f => ({ ...f, name: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                placeholder="Client Name"
+                value={editProjectForm.client_name}
+                onChange={e => setEditProjectForm(f => ({ ...f, client_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                className="w-full border rounded px-3 py-2"
+                placeholder="Description"
+                value={editProjectForm.description}
+                onChange={e => setEditProjectForm(f => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                type="date"
+                placeholder="Start Date"
+                value={editProjectForm.start_date}
+                onChange={e => setEditProjectForm(f => ({ ...f, start_date: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expected End Date</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                type="date"
+                placeholder="Expected End Date"
+                value={editProjectForm.expected_end_date}
+                onChange={e => setEditProjectForm(f => ({ ...f, expected_end_date: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit">Update Project</Button>
+            </div>
           </form>
         </Modal>
       </div>
