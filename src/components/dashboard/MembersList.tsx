@@ -14,7 +14,6 @@ const MembersList: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,14 +40,28 @@ const MembersList: React.FC = () => {
   const handleMemberClick = (member: Member) => {
     setSelectedMember(member);
     setShowProfile(true);
-    setEditMode(false);
     setError('');
   };
 
-  const handleEdit = () => {
-    setEditMode(true);
+  // Open add member modal
+  const handleAddMember = () => {
+    setIsFormOpen(true);
+    setSelectedMember(null);
     setShowProfile(false);
-    // Do not clear selectedMember here!
+  };
+
+  // Open edit member modal
+  const handleEditMember = (member: Member) => {
+    setSelectedMember(member);
+    setIsFormOpen(true);
+    setShowProfile(false);
+  };
+
+  // Open delete confirmation
+  const handleDeleteConfirm = (member: Member) => {
+    setSelectedMember(member);
+    setDeleteConfirm(true);
+    setShowProfile(false);
   };
 
   const handleDelete = async () => {
@@ -66,7 +79,6 @@ const MembersList: React.FC = () => {
   };
 
   const handleUpdate = () => {
-    setEditMode(false);
     setSelectedMember(null);
     loadMembers();
   };
@@ -82,14 +94,14 @@ const MembersList: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Team Members</h2>
           <p className="text-gray-600">Manage your team members and their information</p>
         </div>
         <Button
           icon={Plus}
-          onClick={() => { setIsFormOpen(true); setEditMode(false); setSelectedMember(null); }}
+          onClick={handleAddMember}
         >
           Add Member
         </Button>
@@ -97,30 +109,30 @@ const MembersList: React.FC = () => {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {members.map((member) => (
-          <Card key={member.id} hover className="relative cursor-pointer" onClick={() => handleMemberClick(member)}>
-            {/* Only show edit/delete for non-admins */}
+          <Card
+            key={member.id}
+            hover
+            className="relative cursor-pointer"
+            onClick={() => handleMemberClick(member)}
+          >
             {member.department !== undefined && (
               <>
                 <button
                   title="Edit Member"
-                  className="absolute top-2 left-2 z-10 rounded-full bg-white border border-blue-200 p-1 shadow hover:bg-blue-50 hover:border-blue-400 transition"
+                  className="absolute top-2 left-2 z-10 bg-white border p-1 shadow"
                   onClick={e => {
                     e.stopPropagation();
-                    setSelectedMember(member);
-                    setEditMode(true);
-                    setShowProfile(false);
+                    handleEditMember(member);
                   }}
                 >
-                  <Edit2 className="w-4 h-4 text-blue-600" />
+                  <Edit2 className="w-4 h-4 text-gray-600" />
                 </button>
                 <button
                   title="Delete Member"
-                  className="absolute top-2 right-2 z-10 rounded-full bg-white border border-red-200 p-1 shadow hover:bg-red-50 hover:border-red-400 transition"
+                  className="absolute top-2 right-2 z-10 bg-white border p-1 shadow"
                   onClick={e => {
                     e.stopPropagation();
-                    setSelectedMember(member);
-                    setDeleteConfirm(true);
-                    setShowProfile(false);
+                    handleDeleteConfirm(member);
                   }}
                 >
                   <Trash2 className="w-4 h-4 text-red-600" />
@@ -128,37 +140,21 @@ const MembersList: React.FC = () => {
               </>
             )}
             <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <User className="w-8 h-8 text-blue-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                {member.name}
-              </h3>
-              <div className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-center justify-center">
-                  <Mail className="w-4 h-4 mr-2" />
-                  {member.email}
-                </div>
-                {member.phone && (
-                  <div className="flex items-center justify-center">
-                    <Phone className="w-4 h-4 mr-2" />
-                    {member.phone}
-                  </div>
-                )}
-                {member.department && (
-                  <div className="flex items-center justify-center">
-                    <Building className="w-4 h-4 mr-2" />
-                    {member.department}
-                  </div>
-                )}
-                {member.hire_date && (
-                  <div className="flex items-center justify-center">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Joined {new Date(member.hire_date).toLocaleDateString()}
-                  </div>
+              <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center bg-gray-100 overflow-hidden">
+                {member.avatar_url ? (
+                  <img src={member.avatar_url} alt="Profile" className="w-16 h-16 object-cover rounded-full" />
+                ) : (
+                  <User className="w-8 h-8 text-gray-500" />
                 )}
               </div>
-              <div className="mt-4 flex justify-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">{member.name}</h3>
+              <div className="space-y-1 text-sm text-gray-700">
+                <div>{member.email}</div>
+                {member.phone && <div>{member.phone}</div>}
+                {member.department && <div>{member.department}</div>}
+                {member.hire_date && <div>Joined {new Date(member.hire_date).toLocaleDateString()}</div>}
+              </div>
+              <div className="mt-2">
                 <Badge variant={member.is_active ? 'success' : 'secondary'}>
                   {member.is_active ? 'Active' : 'Inactive'}
                 </Badge>
@@ -175,7 +171,7 @@ const MembersList: React.FC = () => {
           <p className="text-gray-600 mb-6">Get started by adding your first team member</p>
           <Button
             icon={Plus}
-            onClick={() => setIsFormOpen(true)}
+            onClick={handleAddMember}
           >
             Add First Member
           </Button>
@@ -187,7 +183,13 @@ const MembersList: React.FC = () => {
         <Modal isOpen={showProfile} onClose={() => setShowProfile(false)} title="Member Profile">
           <div className="space-y-4">
             <div className="flex items-center space-x-4">
-              <User className="w-10 h-10 text-blue-600" />
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                {selectedMember.avatar_url ? (
+                  <img src={selectedMember.avatar_url} alt="Profile" className="w-12 h-12 object-cover rounded-full" />
+                ) : (
+                  <User className="w-8 h-8 text-gray-500" />
+                )}
+              </div>
               <div>
                 <div className="text-lg font-bold text-gray-900">{selectedMember.name}</div>
                 <div className="text-sm text-gray-600">{selectedMember.email}</div>
@@ -221,44 +223,28 @@ const MembersList: React.FC = () => {
             </div>
             {error && <div className="text-red-600 text-sm">{error}</div>}
             <div className="flex justify-end space-x-3 pt-4">
-              <Button icon={Edit2} onClick={handleEdit}>
+              <Button icon={Edit2} onClick={() => handleEditMember(selectedMember)}>
                 Update
               </Button>
-              <Button icon={Trash2} variant="danger" onClick={() => setDeleteConfirm(true)}>
+              <Button icon={Trash2} variant="danger" onClick={() => handleDeleteConfirm(selectedMember)}>
                 Delete
               </Button>
             </div>
-            {/* Delete Confirmation */}
-            {deleteConfirm && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded">
-                <div className="mb-2 text-red-700">Are you sure you want to delete this member?</div>
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => setDeleteConfirm(false)}>Cancel</Button>
-                  <Button variant="danger" onClick={handleDelete}>Delete</Button>
-                </div>
-              </div>
-            )}
           </div>
         </Modal>
       )}
 
-      {/* Edit Member Modal (always accessible) */}
-      {editMode && selectedMember && (
+      {/* Member Form Modal (add/edit) */}
+      {isFormOpen && (
         <MemberForm
-          isOpen={editMode}
-          onClose={() => setEditMode(false)}
-          onSuccess={handleUpdate}
-          initialData={selectedMember}
+          isOpen={isFormOpen}
+          onClose={() => { setIsFormOpen(false); setSelectedMember(null); }}
+          onSuccess={handleMemberCreated}
+          initialData={selectedMember || undefined}
         />
       )}
 
-      <MemberForm
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        onSuccess={handleMemberCreated}
-      />
-
-      {/* Delete Confirmation Modal (always accessible) */}
+      {/* Delete Confirmation Modal */}
       {deleteConfirm && selectedMember && (
         <Modal isOpen={deleteConfirm} onClose={() => setDeleteConfirm(false)} title="Delete Member">
           <div>Are you sure you want to delete {selectedMember.name}?</div>

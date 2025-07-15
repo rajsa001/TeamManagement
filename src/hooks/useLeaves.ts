@@ -14,7 +14,7 @@ export const useLeaves = () => {
       setLoading(true);
       let query = supabase
         .from('leaves')
-        .select('*');
+        .select('*, user:members!user_id(*)'); // Join member data
       if (user?.role !== 'admin') {
         query = query.eq('user_id', user?.id);
       }

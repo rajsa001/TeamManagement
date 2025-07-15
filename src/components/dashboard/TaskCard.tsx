@@ -86,7 +86,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
               className="text-red-500 hover:text-red-700"
             />
           )}
-          {task.user_id === user?.id && onUpdate && (
+          {(user?.role === 'admin' || task.user_id === user?.id) && onUpdate && (
             <Button
               variant="ghost"
               size="sm"
@@ -99,34 +99,36 @@ const TaskCard: React.FC<TaskCardProps> = ({
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center text-sm text-gray-500">
+        <div className="w-full">
+          <div className="text-sm text-gray-700 mb-1 flex items-center">
+            <span className="font-semibold mr-1">Due Date:</span>
             <Calendar className="w-4 h-4 mr-1" />
             {new Date(task.due_date).toLocaleDateString()}
           </div>
-          {showUser && task.user && (
-            <div className="flex items-center text-sm text-gray-500">
+          <div className="text-sm text-gray-700 mb-1 flex items-center">
+            <span className="font-semibold mr-1">Status:</span>
+            <Badge variant={getStatusVariant(task.status)}>
+              <StatusIcon className="w-3 h-3 mr-1" />
+              {task.status}
+            </Badge>
+            {task.status === 'pending' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onStatusChange(task.id, 'completed')}
+                className="text-green-600 hover:text-green-700 ml-2"
+              >
+                Complete
+              </Button>
+            )}
+          </div>
+          {(showUser && task.user) || (user?.role === 'admin' && task.user) ? (
+            <div className="text-sm text-gray-700 mb-1 flex items-center">
+              <span className="font-semibold mr-1">Assigned to:</span>
               <User className="w-4 h-4 mr-1" />
               {task.user.name}
             </div>
-          )}
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Badge variant={getStatusVariant(task.status)}>
-            <StatusIcon className="w-3 h-3 mr-1" />
-            {task.status}
-          </Badge>
-          {task.status === 'pending' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onStatusChange(task.id, 'completed')}
-              className="text-green-600 hover:text-green-700"
-            >
-              Complete
-            </Button>
-          )}
+          ) : null}
         </div>
       </div>
 

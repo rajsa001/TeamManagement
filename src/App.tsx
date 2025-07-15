@@ -3,14 +3,20 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LandingPage from './components/auth/LandingPage';
 import LoginForm from './components/auth/LoginForm';
 import Header from './components/layout/Header';
-import Sidebar from './components/layout/Sidebar';
+import Sidebar, { SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from './components/layout/Sidebar';
 import MemberDashboard from './components/dashboard/MemberDashboard';
 import AdminDashboard from './components/dashboard/AdminDashboard';
+import MemberProfile from './components/dashboard/MemberProfile';
+import AdminProfile from './components/dashboard/AdminProfile';
+import Reports from './components/dashboard/Reports';
+import { BrowserRouter } from 'react-router-dom';
 
 const AppContent: React.FC = () => {
   const { user } = useAuth();
   const [selectedRole, setSelectedRole] = useState<'admin' | 'member' | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Moved up
+  const SIDEBAR_GAP = 16; // px
 
   if (!user) {
     if (selectedRole) {
@@ -23,23 +29,29 @@ const AppContent: React.FC = () => {
         </div>
       );
     }
-
     return <LandingPage onSelectRole={setSelectedRole} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      <div className="flex">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <main className="flex-1 p-6">
-          {user.role === 'admin' ? (
-            <AdminDashboard activeTab={activeTab} />
-          ) : (
-            <MemberDashboard activeTab={activeTab} />
-          )}
-        </main>
-      </div>
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
+      <main
+        className="transition-all duration-500"
+        style={{
+          paddingLeft: (sidebarOpen ? SIDEBAR_MAX_WIDTH : SIDEBAR_MIN_WIDTH) + SIDEBAR_GAP,
+        }}
+      >
+        {user.role === 'admin' ? (
+          activeTab === 'profile' ? <AdminProfile />
+          : activeTab === 'reports' ? <Reports />
+          : <AdminDashboard activeTab={activeTab} />
+        ) : activeTab === 'profile' ? (
+          <MemberProfile />
+        ) : (
+          <MemberDashboard activeTab={activeTab} />
+        )}
+      </main>
     </div>
   );
 };
@@ -47,7 +59,9 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <AppContent />
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
     </AuthProvider>
   );
 };

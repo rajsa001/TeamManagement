@@ -8,9 +8,12 @@ interface ProjectCardProps {
   project: Project;
   isAdmin?: boolean;
   tasks?: Task[];
+  onDelete?: (id: string) => void;
+  onStatusChange?: (id: string, status: Task['status']) => void;
+  onUpdate?: (id: string, updates: Partial<Task>) => void;
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [] }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [], onDelete, onStatusChange, onUpdate }) => {
   // Remove internal state and fetching for tasks
   const { user } = useAuth();
 
@@ -34,7 +37,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [] 
         ) : (
           <div className="space-y-2">
             {tasks.map(task => (
-              <TaskCard key={task.id} task={task} onDelete={() => {}} onStatusChange={() => {}} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                onDelete={onDelete || (() => {})}
+                onStatusChange={onStatusChange || (() => {})}
+                onUpdate={onUpdate}
+                showUser={true}
+              />
             ))}
           </div>
         )}

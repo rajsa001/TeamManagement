@@ -58,7 +58,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
     const baseTask = {
       ...formData,
       status: 'pending' as const,
-      created_by: user?.id || '',
+      created_by: formData.user_id,
     };
     onSubmit(baseTask);
     setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '' });

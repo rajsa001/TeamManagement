@@ -123,7 +123,11 @@ const AdminsList: React.FC = () => {
                 <Trash2 className="w-4 h-4 text-red-600" />
               </button>
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <User className="w-8 h-8 text-blue-600" />
+                {admin.avatar_url ? (
+                  <img src={admin.avatar_url} alt="Profile" className="w-16 h-16 object-cover rounded-full" />
+                ) : (
+                  <User className="w-8 h-8 text-blue-600" />
+                )}
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-1">
                 {admin.name}

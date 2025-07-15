@@ -51,8 +51,14 @@ export interface Leave {
   id: string;
   user_id: string;
   leave_date: string;
-  leave_type: 'sick' | 'casual' | 'paid';
+  end_date?: string | null;
+  leave_type: 'sick' | 'casual' | 'paid' | 'maternity' | 'paternity' | 'emergency' | 'vacation';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   reason: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  notes?: string | null;
+  is_half_day?: boolean;
   created_at: string;
   updated_at: string;
   user?: Member;
@@ -63,6 +69,7 @@ export interface AuthContextType {
   login: (email: string, password: string, role: 'admin' | 'member') => Promise<void>;
   logout: () => void;
   loading: boolean;
+  setUser: (user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | null) => void;
 }
 
 export interface TaskFilters {

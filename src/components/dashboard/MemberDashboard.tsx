@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, User } from 'lucide-react';
+import { Plus, User, Bell } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,6 +14,7 @@ import Modal from '../ui/Modal';
 import LeaveForm from './LeaveForm';
 import ProjectCard from './ProjectCard';
 import { useProjects } from '../../hooks/useProjects';
+import { supabase } from '../../lib/supabase';
 
 interface MemberDashboardProps {
   activeTab: string;
@@ -32,6 +33,55 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   const [deleteLeaveId, setDeleteLeaveId] = useState<string | null>(null);
   const [editFormOpen, setEditFormOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+    department: user?.department || '',
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    new: '',
+    confirm: '',
+  });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  // Add departments list for dropdown
+  const departments = [
+    'Engineering', 'Design', 'Marketing', 'Sales',
+    'HR', 'Finance', 'Operations', 'Customer Support'
+  ];
+  // Add avatar upload state
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Add this function to handle notification removal
+  const handleRemoveNotification = async (id: string) => {
+    // Remove from Supabase
+    await supabase.from('notifications').delete().eq('id', id);
+    // Remove from local state
+    setNotifications(notifications => notifications.filter(n => n.id !== id));
+  };
+
+  // Fetch notifications for the logged-in member
+  React.useEffect(() => {
+    const fetchNotifications = async () => {
+      if (!user) return;
+      setNotificationsLoading(true);
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (!error && data) setNotifications(data);
+      setNotificationsLoading(false);
+    };
+    fetchNotifications();
+  }, [user]);
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -72,15 +122,97 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     }
   };
 
+  // Profile update handler
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileLoading(true);
+    let avatar_url = user.avatar_url;
+    if (avatarFile) {
+      setAvatarUploading(true);
+      const fileExt = avatarFile.name.split('.').pop();
+      const fileName = `${user.id}_${Date.now()}.${fileExt}`;
+      const { data, error: uploadError } = await supabase.storage.from('avatars').upload(fileName, avatarFile, { upsert: true });
+      setAvatarUploading(false);
+      if (uploadError) {
+        alert('Failed to upload avatar: ' + uploadError.message);
+        setProfileLoading(false);
+        return;
+      }
+      avatar_url = data?.path ? supabase.storage.from('avatars').getPublicUrl(data.path).publicUrl : user.avatar_url;
+    }
+    const { error } = await supabase
+      .from('members')
+      .update({
+        name: profileForm.name,
+        phone: profileForm.phone,
+        department: profileForm.department,
+        hire_date: profileForm.hire_date,
+        avatar_url,
+      })
+      .eq('id', user.id);
+    setProfileLoading(false);
+    if (!error) {
+      setEditProfileOpen(false);
+      window.location.reload();
+    } else {
+      alert('Failed to update profile: ' + error.message);
+    }
+  };
+
+  // Password update handler (dummy, as Supabase Auth is not used)
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordForm.new !== passwordForm.confirm) {
+      alert('New passwords do not match.');
+      return;
+    }
+    // If using Supabase Auth, call updateUser. Here, just close modal.
+    setPasswordLoading(true);
+    setTimeout(() => {
+      setPasswordLoading(false);
+      setChangePasswordOpen(false);
+      alert('Password updated (demo only).');
+    }, 1000);
+  };
+
   if (activeTab === 'dashboard') {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">My Dashboard</h1>
-          <button onClick={() => setShowProfile(true)} className="p-2 rounded-full hover:bg-gray-100">
-            <User className="w-6 h-6 text-gray-700" />
+          <button onClick={() => setShowNotifications(true)} className="p-2 rounded-full hover:bg-gray-100 relative">
+            <Bell className="w-6 h-6 text-gray-700" />
+            {notifications.length > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            )}
           </button>
         </div>
+        
+        {/* Notifications Modal */}
+        <Modal isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="Notifications">
+          {notificationsLoading ? (
+            <div className="text-gray-500">Loading notifications...</div>
+          ) : notifications.length === 0 ? (
+            <div className="text-gray-500">No notifications.</div>
+          ) : (
+            <div className="space-y-2">
+              {notifications.map(n => (
+                <div key={n.id} className="p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded relative">
+                  <button
+                    className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
+                    onClick={() => handleRemoveNotification(n.id)}
+                    aria-label="Dismiss notification"
+                  >
+                    ×
+                  </button>
+                  <div className="font-semibold text-gray-900">{n.title}</div>
+                  <div className="text-sm text-gray-700">{n.message}</div>
+                  <div className="text-xs text-gray-500">{new Date(n.created_at).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
         
         <DashboardStats tasks={tasks} leaves={leaves} />
         
@@ -121,46 +253,6 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             </div>
           </div>
         </div>
-        {/* Profile Modal */}
-        {showProfile && user && (
-          <Modal isOpen={showProfile} onClose={() => setShowProfile(false)} title="My Profile">
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <User className="w-10 h-10 text-blue-600" />
-                <div>
-                  <div className="text-lg font-bold text-gray-900">{user.name}</div>
-                  <div className="text-sm text-gray-600">{user.email}</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs text-gray-500">Phone</div>
-                  <div className="text-sm text-gray-900">{user.phone || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Department</div>
-                  <div className="text-sm text-gray-900">{user.department || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Hire Date</div>
-                  <div className="text-sm text-gray-900">{user.hire_date ? new Date(user.hire_date).toLocaleDateString() : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Active</div>
-                  <div className="text-sm text-gray-900">{user.is_active ? 'Yes' : 'No'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Created At</div>
-                  <div className="text-sm text-gray-900">{user.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Updated At</div>
-                  <div className="text-sm text-gray-900">{user.updated_at ? new Date(user.updated_at).toLocaleDateString() : '-'}</div>
-                </div>
-              </div>
-            </div>
-          </Modal>
-        )}
       </div>
     );
   }

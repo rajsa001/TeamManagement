@@ -9,25 +9,27 @@ export const useTasks = () => {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
+  // Refetch function
+  const refetchTasks = async () => {
+    setLoading(true);
+    let query = supabase
+      .from('tasks')
+      .select('*, project:projects(*), user:members!user_id(*)');
+    if (user?.role !== 'admin') {
+      query = query.eq('user_id', user?.id);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) {
+      console.error('Error fetching tasks:', error);
+      setTasks([]);
+    } else {
+      setTasks(data || []);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const loadTasks = async () => {
-      setLoading(true);
-      let query = supabase
-        .from('tasks')
-        .select('*, project:projects(*)');
-      if (user?.role !== 'admin') {
-        query = query.eq('user_id', user?.id);
-      }
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (error) {
-        console.error('Error fetching tasks:', error);
-        setTasks([]);
-      } else {
-        setTasks(data || []);
-      }
-      setLoading(false);
-    };
-    if (user) loadTasks();
+    if (user) refetchTasks();
   }, [user]);
 
   const addTask = async (taskData: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'user'> & { created_by: string }) => {
@@ -49,7 +51,8 @@ export const useTasks = () => {
       return false;
     }
     if (data) {
-      setTasks(prev => [data, ...prev]);
+      // Instead of just adding to state, refetch all tasks for full hydration
+      await refetchTasks();
       // Send webhook to n8n automation
       try {
         await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
@@ -141,5 +144,6 @@ export const useTasks = () => {
     updateTask,
     deleteTask,
     filterTasks,
+    refetchTasks,
   };
 };
