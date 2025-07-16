@@ -50,7 +50,7 @@ export interface Task {
 export interface Leave {
   id: string;
   user_id: string;
-  leave_date: string;
+  leave_date: string | null;
   end_date?: string | null;
   leave_type: 'sick' | 'casual' | 'paid' | 'maternity' | 'paternity' | 'emergency' | 'vacation';
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -62,6 +62,10 @@ export interface Leave {
   created_at: string;
   updated_at: string;
   user?: Member;
+  category?: 'single-day' | 'multi-day';
+  from_date?: string | null;
+  to_date?: string | null;
+  brief_description?: string | null;
 }
 
 export interface AuthContextType {

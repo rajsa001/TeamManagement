@@ -12,6 +12,7 @@ const AdminProfile: React.FC = () => {
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
+    email: user?.email || '',
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -60,6 +61,7 @@ const AdminProfile: React.FC = () => {
     const updatePayload = {
       name: profileForm.name,
       phone: profileForm.phone,
+      email: profileForm.email,
       avatar_url,
     };
     console.log('[DEBUG] AdminProfile: update payload', updatePayload);
@@ -175,12 +177,17 @@ const AdminProfile: React.FC = () => {
             onChange={e => setProfileForm(f => ({ ...f, name: e.target.value }))}
             required
           />
-          <input
-            className="w-full border rounded px-3 py-2"
-            placeholder="Email"
-            value={user.email}
-            disabled
-          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              className="w-full border rounded px-3 py-2"
+              placeholder="Email"
+              value={profileForm.email}
+              onChange={e => setProfileForm({ ...profileForm, email: e.target.value })}
+              type="email"
+              required
+            />
+          </div>
           <input
             className="w-full border rounded px-3 py-2"
             placeholder="Phone"

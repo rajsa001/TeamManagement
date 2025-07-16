@@ -104,14 +104,20 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
       end_date: updatedLeave.end_date,
       leave_type: updatedLeave.leave_type,
       reason: updatedLeave.reason,
+      category: updatedLeave.category,
+      from_date: updatedLeave.from_date,
+      to_date: updatedLeave.to_date,
+      brief_description: updatedLeave.brief_description,
+      status: updatedLeave.status,
     });
     setEditFormOpen(false);
     setEditLeave(null);
   };
 
   const handleDeleteLeave = (id) => {
-    setDeleteLeaveId(id);
-    setDeleteConfirmOpen(true);
+    deleteLeave(id);
+    setDeleteLeaveId(null);
+    setDeleteConfirmOpen(false);
   };
 
   const confirmDeleteLeave = () => {
@@ -235,21 +241,47 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Leaves</h2>
             <div className="space-y-2">
-              {leaves.slice(0, 3).map(leave => (
-                <div key={leave.id} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {new Date(leave.leave_date).toLocaleDateString()}
-                      </p>
-                      <p className="text-sm text-gray-600">{leave.leave_type} leave</p>
-                    </div>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {leave.leave_type}
-                    </span>
+              {leaves
+                .filter(leave => {
+                  // Only show leaves that are today or in the future (for single-day), or multi-day leaves that end today or later
+                  const today = new Date();
+                  today.setHours(0,0,0,0);
+                  if (leave.category === 'multi-day' && leave.to_date) {
+                    return new Date(leave.to_date) >= today;
+                  } else if (leave.leave_date) {
+                    return new Date(leave.leave_date) >= today;
+                  }
+                  return false;
+                })
+                .sort((a, b) => {
+                  // Sort by start date
+                  const aDate = a.category === 'multi-day' ? new Date(a.from_date ?? '') : new Date(a.leave_date ?? '');
+                  const bDate = b.category === 'multi-day' ? new Date(b.from_date ?? '') : new Date(b.leave_date ?? '');
+                  return aDate.getTime() - bDate.getTime();
+                })
+                .slice(0, 3)
+                .map(leave => (
+                  <div key={leave.id} className="p-3 bg-gray-50 rounded-lg">
+                    {leave.category === 'multi-day' ? (
+                      <>
+                        <div><strong>Type:</strong> Multi-day</div>
+                        <div><strong>Reason:</strong> {leave.reason}</div>
+                        <div><strong>From:</strong> {leave.from_date}</div>
+                        <div><strong>To:</strong> {leave.to_date}</div>
+                        <div><strong>Description:</strong> {leave.brief_description}</div>
+                        <div><strong>Status:</strong> {leave.status}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div><strong>Type:</strong> Single Day</div>
+                        <div><strong>Date:</strong> {leave.leave_date}</div>
+                        <div><strong>Leave Type:</strong> {leave.leave_type}</div>
+                        <div><strong>Reason:</strong> {leave.reason}</div>
+                        <div><strong>Status:</strong> {leave.status}</div>
+                      </>
+                    )}
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         </div>
@@ -321,48 +353,12 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           </div>
         ) : (
-          <>
-            <LeaveCalendar
-              leaves={leaves}
-              onAddLeave={addLeave}
-            />
-            {/* List of all leaves */}
-            <div className="mt-8">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">All My Leaves</h2>
-              <div className="grid gap-4">
-                {leaves.length === 0 ? (
-                  <div className="text-gray-500">No leaves found.</div>
-                ) : (
-                  leaves.map(leave => {
-                    const leaveDate = new Date(leave.leave_date);
-                    const isFuture = leaveDate > today;
-                    return (
-                      <div key={leave.id} className="p-4 border rounded-lg bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                        <div>
-                          <div className="font-medium text-gray-900">{leave.leave_type.charAt(0).toUpperCase() + leave.leave_type.slice(1)} Leave</div>
-                          <div className="text-sm text-gray-600">{new Date(leave.leave_date).toLocaleDateString()} {leave.end_date ? `- ${new Date(leave.end_date).toLocaleDateString()}` : ''}</div>
-                          <div className="text-sm text-gray-600">Reason: {leave.reason}</div>
-                          <div className="text-sm text-gray-600">Status: {leave.status}</div>
-                        </div>
-                        <div className="flex gap-2">
-                          {isFuture && (
-                            <>
-                              <Button size="sm" variant="outline" onClick={() => handleEditLeave(leave)}>
-                                Edit
-                              </Button>
-                              <Button size="sm" variant="danger" onClick={() => handleDeleteLeave(leave.id)}>
-                                Delete
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </>
+          <LeaveCalendar
+            leaves={leaves}
+            onAddLeave={addLeave}
+            onUpdateLeave={handleUpdateLeave}
+            onDeleteLeave={handleDeleteLeave}
+          />
         )}
         {/* Edit and Delete modals will be implemented next */}
         {/* Edit Leave Modal */}

@@ -4,21 +4,30 @@ import { Leave } from '../../types';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import LeaveForm from './LeaveForm';
+import Modal from '../ui/Modal';
 
 interface LeaveCalendarProps {
   leaves: Leave[];
   onAddLeave: (leave: Omit<Leave, 'id' | 'created_at' | 'updated_at'>) => void;
+  onUpdateLeave?: (leave: Leave) => void;
+  onDeleteLeave?: (id: string) => void;
   showUserInfo?: boolean;
 }
 
 const LeaveCalendar: React.FC<LeaveCalendarProps> = ({ 
   leaves, 
   onAddLeave, 
+  onUpdateLeave,
+  onDeleteLeave,
   showUserInfo = false 
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [editLeave, setEditLeave] = useState<Leave | null>(null);
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const [deleteLeaveId, setDeleteLeaveId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -75,6 +84,40 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
 
   const days = getDaysInMonth(currentDate);
 
+  // Add handlers for edit/delete (assume passed as props or implement as needed)
+  // Example: const onEdit = (leave) => { ... };
+  // Example: const onDelete = (leaveId) => { ... };
+
+  // Helper to get all leaves for the current month (for list display)
+  const getLeavesForCurrentMonth = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth() + 1;
+    return leaves.filter(leave => {
+      if (leave.category === 'multi-day') {
+        // Show if any part of the leave is in this month
+        const from = leave.from_date ? new Date(leave.from_date) : null;
+        const to = leave.to_date ? new Date(leave.to_date) : null;
+        return (
+          (from && from.getFullYear() === year && from.getMonth() + 1 === month) ||
+          (to && to.getFullYear() === year && to.getMonth() + 1 === month)
+        );
+      } else {
+        // Single day
+        return leave.leave_date && leave.leave_date.startsWith(`${year}-${String(month).padStart(2, '0')}`);
+      }
+    });
+  };
+
+  // Helper to get all leaves (for unified list)
+  const getAllLeaves = () => {
+    // Sort by date (single-day: leave_date, multi-day: from_date)
+    return [...leaves].sort((a, b) => {
+      const aDate = a.category === 'multi-day' ? new Date(a.from_date ?? '') : new Date(a.leave_date ?? '');
+      const bDate = b.category === 'multi-day' ? new Date(b.from_date ?? '') : new Date(b.leave_date ?? '');
+      return aDate.getTime() - bDate.getTime();
+    });
+  };
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-6">
@@ -117,8 +160,29 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
             return <div key={index} className="p-2 h-20" />;
           }
 
-          const leave = getLeaveForDate(day);
-          const isToday = 
+          // Find all leaves for this day (single and multi-day)
+          const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const leavesForDay = leaves.filter(leave => {
+            if (leave.category === 'multi-day') {
+              if (leave.from_date && leave.to_date) {
+                const from = new Date(leave.from_date ?? '');
+                const to = new Date(leave.to_date ?? '');
+                const thisDay = new Date(dateString);
+                from.setHours(0,0,0,0);
+                to.setHours(0,0,0,0);
+                thisDay.setHours(0,0,0,0);
+                return from <= thisDay && thisDay <= to;
+              }
+              return false;
+            } else {
+              return leave.leave_date === dateString;
+            }
+          });
+
+          // Disable selection if any leave exists for this day
+          const isDisabled = leavesForDay.length > 0;
+
+          const isToday =
             day === new Date().getDate() &&
             currentDate.getMonth() === new Date().getMonth() &&
             currentDate.getFullYear() === new Date().getFullYear();
@@ -129,30 +193,66 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
               className={`
                 p-2 h-20 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors
                 ${isToday ? 'bg-blue-50 border-blue-300' : ''}
-                ${leave ? 'bg-red-50 border-red-300' : ''}
+                ${leavesForDay.length > 0 ? 'bg-red-50 border-red-300' : ''}
+                ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
               `}
-              onClick={() => handleDateClick(day)}
+              onClick={() => !isDisabled && handleDateClick(day)}
             >
               <div className="flex flex-col h-full">
                 <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
                   {day}
                 </span>
-                {leave && (
-                  <div className="flex-1 mt-1">
-                    <div className="text-xs bg-red-100 text-red-800 px-1 py-0.5 rounded truncate">
-                      {leave.leave_type}
-                    </div>
-                    {showUserInfo && leave.user && (
-                      <div className="text-xs text-gray-600 mt-1 truncate">
-                        {leave.user.name}
+                {leavesForDay.length > 0 && (
+                  <div className="flex-1 mt-1 space-y-1">
+                    {leavesForDay.map(leave => (
+                      <div key={leave.id} className="text-xs bg-red-100 text-red-800 px-1 py-0.5 rounded truncate">
+                        {leave.category === 'multi-day'
+                          ? `Multi-day: ${leave.from_date} to ${leave.to_date}`
+                          : leave.leave_type}
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* Unified All Leaves section below the calendar */}
+      <div className="mt-6">
+        <h3 className="text-lg font-semibold mb-2">All Leaves</h3>
+        <div className="space-y-3">
+          {getAllLeaves().length === 0 && (
+            <div className="text-gray-500">No leaves found.</div>
+          )}
+          {getAllLeaves().map(leave => (
+            <div key={leave.id} className="p-3 border rounded bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div>
+                <div><strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}</div>
+                {leave.category === 'multi-day' ? (
+                  <>
+                    <div><strong>From:</strong> {leave.from_date}</div>
+                    <div><strong>To:</strong> {leave.to_date}</div>
+                    <div><strong>Reason:</strong> {leave.reason}</div>
+                    <div><strong>Description:</strong> {leave.brief_description}</div>
+                  </>
+                ) : (
+                  <>
+                    <div><strong>Date:</strong> {leave.leave_date}</div>
+                    <div><strong>Leave Type:</strong> {leave.leave_type}</div>
+                    <div><strong>Reason:</strong> {leave.reason}</div>
+                  </>
+                )}
+                <div><strong>Status:</strong> {leave.status}</div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => { setEditLeave(leave); setEditFormOpen(true); }}>Update</Button>
+                <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <LeaveForm
@@ -164,6 +264,37 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
         onSubmit={onAddLeave}
         selectedDate={selectedDate}
       />
+      {/* Edit Leave Modal */}
+      {editFormOpen && editLeave && (
+        <Modal isOpen={editFormOpen} onClose={() => setEditFormOpen(false)} title="Edit Leave">
+          <LeaveForm
+            isOpen={editFormOpen}
+            onClose={() => setEditFormOpen(false)}
+            onSubmit={leave => {
+              if (onUpdateLeave) onUpdateLeave({ ...editLeave, ...leave });
+              setEditFormOpen(false);
+              setEditLeave(null);
+            }}
+            selectedDate={editLeave.leave_date || undefined}
+            initialData={editLeave}
+            noModal={true}
+          />
+        </Modal>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmOpen && (
+        <Modal isOpen={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Delete Leave">
+          <div>Are you sure you want to delete this leave?</div>
+          <div className="flex justify-end space-x-2 mt-4">
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button variant="danger" onClick={() => {
+              if (onDeleteLeave && deleteLeaveId) onDeleteLeave(deleteLeaveId);
+              setDeleteLeaveId(null);
+              setDeleteConfirmOpen(false);
+            }}>Delete</Button>
+          </div>
+        </Modal>
+      )}
     </Card>
   );
 };

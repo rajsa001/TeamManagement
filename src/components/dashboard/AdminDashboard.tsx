@@ -53,17 +53,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     await refetchTasks();
   };
 
-  async function handleApproveDeclineLeave(leaveId: string, status: 'approved' | 'rejected', userId: string, leaveDate: string, endDate: string | null, leaveType: string) {
+  async function handleApproveDeclineLeave(leaveId: string, status: 'approved' | 'rejected', userId: string, leaveDate: string, endDate: string | null, leaveType: string, category?: string, from_date?: string | null, to_date?: string | null) {
     // Update leave status
     await updateLeave(leaveId, { status });
     // Send notification to member
     const isApproved = status === 'approved';
     const notifType = isApproved ? 'leave_approved' : 'leave_rejected';
     const notifTitle = isApproved ? 'Leave Approved' : 'Leave Rejected';
-    const leaveDateStr = endDate ? `${new Date(leaveDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}` : new Date(leaveDate).toLocaleDateString();
+    let leaveDateStr = '';
+    if (category === 'multi-day' && from_date && to_date) {
+      leaveDateStr = `Type: Multi-day | From: ${from_date} | To: ${to_date} | Leave Type: ${leaveType}`;
+    } else {
+      leaveDateStr = `Type: Single Day | Date: ${leaveDate} | Leave Type: ${leaveType}`;
+    }
     const notifMsg = isApproved
-      ? `Your leave request for ${leaveDateStr} (${leaveType}) has been approved.`
-      : `Your leave request for ${leaveDateStr} (${leaveType}) has been declined.`;
+      ? `Your leave request (${leaveDateStr}) has been approved.`
+      : `Your leave request (${leaveDateStr}) has been declined.`;
     const { error } = await supabase.from('notifications').insert({
       user_id: userId,
       title: notifTitle,
@@ -343,14 +348,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                 <div key={leave.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center">
                   <div>
                     <div className="font-semibold text-gray-900">{leave.user?.name || 'Unknown User'}</div>
-                    <div className="text-sm text-gray-600">{new Date(leave.leave_date).toLocaleDateString()} {leave.end_date ? `- ${new Date(leave.end_date).toLocaleDateString()}` : ''} | {leave.leave_type}</div>
+                    <div className="text-sm text-gray-600">
+                      <strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}
+                      {leave.category === 'multi-day' ? (
+                        <>
+                          {' | '}<strong>From:</strong> {leave.from_date} <strong>To:</strong> {leave.to_date}
+                        </>
+                      ) : (
+                        <>
+                          {' | '}<strong>Date:</strong> {leave.leave_date}
+                        </>
+                      )}
+                      {' | '}<strong>Leave Type:</strong> {leave.leave_type}
+                    </div>
                     <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
                     <div className="text-xs text-gray-500">Status: <span className={leave.status === 'pending' ? 'text-yellow-600' : leave.status === 'approved' ? 'text-green-600' : 'text-red-600'}>{leave.status}</span></div>
                   </div>
                   {leave.status === 'pending' && (
                     <div className="flex space-x-2">
-                      <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type)}>Approve</Button>
-                      <Button variant="danger" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'rejected', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type)}>Decline</Button>
+                      <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Approve</Button>
+                      <Button variant="danger" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'rejected', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Decline</Button>
                     </div>
                   )}
                 </div>

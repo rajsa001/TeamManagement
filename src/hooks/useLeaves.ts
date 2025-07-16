@@ -33,9 +33,12 @@ export const useLeaves = () => {
 
   const addLeave = async (leaveData: Omit<Leave, 'id' | 'created_at' | 'updated_at' | 'user'>) => {
     setError(null);
-    // Log the payload for debugging
+    // Ensure from_date and to_date are null for single-day leaves
     const payload = {
       ...leaveData,
+      leave_date: leaveData.category === 'multi-day' ? null : leaveData.leave_date,
+      from_date: leaveData.from_date && leaveData.from_date !== '' ? leaveData.from_date : null,
+      to_date: leaveData.to_date && leaveData.to_date !== '' ? leaveData.to_date : null,
       end_date: leaveData.end_date === '' ? null : leaveData.end_date,
     };
     delete payload.id; // Ensure id is not sent for insert
@@ -54,6 +57,11 @@ export const useLeaves = () => {
       setLeaves(prev => [data, ...prev]);
       // Send webhook to n8n automation for leave added (to both URLs)
       try {
+        await fetch('https://n8nautomation.site/webhook-test/onLeaveAdded', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
         await fetch('https://n8nautomation.site/webhook-test/onleaveadded', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

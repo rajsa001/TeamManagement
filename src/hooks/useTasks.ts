@@ -96,7 +96,7 @@ export const useTasks = () => {
             .eq('id', data.project_id)
             .single();
           if (!projectError && project) projectName = project.name;
-        }
+        }//request for task added here.
         await fetch('https://n8nautomation.site/webhook-test/onTaskAddedByAdmin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -162,14 +162,18 @@ export const useTasks = () => {
         if (updates.status && prevStatus && updates.status !== prevStatus) {
           // Fetch member name and email
           let memberName = '';
+          let memberEmail = '';
           let projectName = '';
           if (data.user_id) {
             const { data: member, error: memberError } = await supabase
               .from('members')
-              .select('name')
+              .select('name, email')
               .eq('id', data.user_id)
               .single();
-            if (!memberError && member) memberName = member.name;
+            if (!memberError && member) {
+              memberName = member.name;
+              memberEmail = member.email;
+            }
           }
           if (data.project_id) {
             const { data: project, error: projectError } = await supabase
@@ -178,7 +182,7 @@ export const useTasks = () => {
               .eq('id', data.project_id)
               .single();
             if (!projectError && project) projectName = project.name;
-          }
+          } //The request for status update here.
           await fetch('https://n8nautomation.site/webhook-test/onTaskUpdatedByAdmin', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -188,10 +192,12 @@ export const useTasks = () => {
               due_date: data.due_date,
               assigned_date: data.created_at,
               assigned_to: memberName,
+              assigned_to_email: memberEmail,
               project_name: projectName,
               updated_by: user?.name || '',
               updated_status: updates.status,
               previous_status: prevStatus,
+              status_updated_date: new Date().toISOString(),
             }),
           });
         }
