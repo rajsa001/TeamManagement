@@ -167,6 +167,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     await deleteProject(id);
   };
 
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+
+  React.useEffect(() => {
+    authService.getMembers().then(data => {
+      setMembers(data.map(m => ({ id: m.id, name: m.name })));
+    });
+  }, []);
+
   if (activeTab === 'dashboard') {
     // Date helpers
     const today = new Date();
@@ -181,10 +189,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
       return diff <= 3 && diff >= 0;
     });
 
-    // Due Today: due date is today
+    // Due Today: due date is today and not completed
     const dueTodayTasks = tasks.filter(task => {
       const due = new Date(task.due_date);
-      return isSameDay(due, today);
+      return isSameDay(due, today) && task.status !== 'completed';
     });
 
     // Upcoming: due date is within next 3 days (excluding today)
@@ -194,10 +202,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
       return diff > 0 && diff <= 3;
     });
 
-    // Blocked: overdue and not completed
+    // Blocked: overdue and not completed, or status is 'blocked'
     const blockedTasks = tasks.filter(task => {
       const due = new Date(task.due_date);
-      return due < today && task.status !== 'completed';
+      return (task.status !== 'completed' && due < today) || task.status === 'blocked';
     });
 
     return (
@@ -277,6 +285,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           filters={taskFilters}
           onFiltersChange={setTaskFilters}
           showMemberFilter={true}
+          members={members}
+          projects={projects.map(p => ({ id: p.id, name: p.name }))}
         />
 
         {tasksError && (

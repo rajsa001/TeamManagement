@@ -53,7 +53,7 @@ export const useTasks = () => {
     if (data) {
       // Instead of just adding to state, refetch all tasks for full hydration
       await refetchTasks();
-      // Send webhook to n8n automation
+      // Send webhook to n8n automation (legacy)
       try {
         await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
           method: 'POST',
@@ -72,6 +72,50 @@ export const useTasks = () => {
       } catch (webhookError) {
         console.error('Failed to send task added webhook:', webhookError);
       }
+      // --- NEW: Send to admin automation pipeline ---
+      try {
+        // Fetch member name and email
+        let memberName = '';
+        let memberEmail = '';
+        let projectName = '';
+        if (data.user_id) {
+          const { data: member, error: memberError } = await supabase
+            .from('members')
+            .select('name, email')
+            .eq('id', data.user_id)
+            .single();
+          if (!memberError && member) {
+            memberName = member.name;
+            memberEmail = member.email;
+          }
+        }
+        if (data.project_id) {
+          const { data: project, error: projectError } = await supabase
+            .from('projects')
+            .select('name')
+            .eq('id', data.project_id)
+            .single();
+          if (!projectError && project) projectName = project.name;
+        }
+        await fetch('https://n8nautomation.site/webhook-test/onTaskAddedByAdmin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_name: data.task_name,
+            description: data.description,
+            due_date: data.due_date,
+            assigned_date: data.created_at,
+            assigned_to: memberName,
+            assigned_to_email: memberEmail,
+            project_name: projectName,
+            assigned_by: user?.name || '',
+            status: data.status,
+          }),
+        });
+      } catch (automationError) {
+        console.error('Failed to send admin automation webhook:', automationError);
+      }
+      // --- END NEW ---
       return true;
     }
     setError('Unknown error adding task');
@@ -79,6 +123,9 @@ export const useTasks = () => {
   };
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
+    // Find the previous task for status comparison
+    const prevTask = tasks.find(task => task.id === id);
+    const prevStatus = prevTask?.status;
     const { data, error } = await supabase
       .from('tasks')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -90,7 +137,7 @@ export const useTasks = () => {
     }
     if (data) {
       setTasks(prev => prev.map(task => (task.id === id ? data : task)));
-      // Send webhook to n8n automation for task update
+      // Send webhook to n8n automation for task update (legacy)
       try {
         await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
           method: 'POST',
@@ -110,6 +157,48 @@ export const useTasks = () => {
       } catch (webhookError) {
         console.error('Failed to send task updated webhook:', webhookError);
       }
+      // --- NEW: Send to admin automation pipeline if status changed ---
+      try {
+        if (updates.status && prevStatus && updates.status !== prevStatus) {
+          // Fetch member name and email
+          let memberName = '';
+          let projectName = '';
+          if (data.user_id) {
+            const { data: member, error: memberError } = await supabase
+              .from('members')
+              .select('name')
+              .eq('id', data.user_id)
+              .single();
+            if (!memberError && member) memberName = member.name;
+          }
+          if (data.project_id) {
+            const { data: project, error: projectError } = await supabase
+              .from('projects')
+              .select('name')
+              .eq('id', data.project_id)
+              .single();
+            if (!projectError && project) projectName = project.name;
+          }
+          await fetch('https://n8nautomation.site/webhook-test/onTaskUpdatedByAdmin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              task_name: data.task_name,
+              description: data.description,
+              due_date: data.due_date,
+              assigned_date: data.created_at,
+              assigned_to: memberName,
+              project_name: projectName,
+              updated_by: user?.name || '',
+              updated_status: updates.status,
+              previous_status: prevStatus,
+            }),
+          });
+        }
+      } catch (automationError) {
+        console.error('Failed to send admin automation update webhook:', automationError);
+      }
+      // --- END NEW ---
     }
   };
 
@@ -125,6 +214,17 @@ export const useTasks = () => {
     return tasks.filter(task => {
       if (filters.status && task.status !== filters.status) return false;
       if (filters.member && task.user_id !== filters.member) return false;
+      if (filters.assignedTo && task.user_id !== filters.assignedTo) return false;
+      if (filters.project && task.project_id !== filters.project) return false;
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        if (
+          !task.task_name.toLowerCase().includes(searchLower) &&
+          !task.description.toLowerCase().includes(searchLower)
+        ) {
+          return false;
+        }
+      }
       return true;
     }).sort((a, b) => {
       if (filters.dueDateSort === 'asc') {

@@ -18,6 +18,7 @@ interface ProjectCardProps {
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [], onDelete, onEdit, onStatusChange, onUpdate }) => {
   // Remove internal state and fetching for tasks
   const { user } = useAuth();
+  const [showTasks, setShowTasks] = useState(false);
 
   return (
     <div className="bg-white rounded-lg shadow p-4 mb-4 border border-gray-100">
@@ -53,19 +54,29 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [],
         </>
       )}
       <div className="mt-4">
-        <h4 className="font-semibold text-gray-900 mb-2 text-sm">Tasks for this project:</h4>
-        {tasks.length === 0 ? (
-          <div className="text-gray-500 text-xs">No tasks for this project.</div>
-        ) : (
-          <div className="space-y-2">
-            {tasks.map(task => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                showUser={true}
-              />
-            ))}
-          </div>
+        <button
+          className="text-blue-600 hover:underline text-sm font-medium mb-2"
+          onClick={() => setShowTasks(v => !v)}
+        >
+          {showTasks ? 'Hide Tasks' : 'Show Tasks'}
+        </button>
+        {showTasks && (
+          <>
+            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Tasks for this project:</h4>
+            {tasks.length === 0 ? (
+              <div className="text-gray-500 text-xs">No tasks for this project.</div>
+            ) : (
+              <div className="space-y-2">
+                {tasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    showUser={true}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

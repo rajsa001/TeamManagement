@@ -39,7 +39,7 @@ export interface Task {
   task_name: string;
   description: string;
   due_date: string;
-  status: 'not_started' | 'in_progress' | 'completed';
+  status: 'pending' | 'not_started' | 'in_progress' | 'completed';
   created_at: string;
   updated_at: string;
   user?: Member;
@@ -73,9 +73,12 @@ export interface AuthContextType {
 }
 
 export interface TaskFilters {
-  status?: 'not_started' | 'in_progress' | 'completed';
+  status?: 'not_started' | 'in_progress' | 'completed' | 'pending';
   member?: string;
   dueDateSort?: 'asc' | 'desc';
+  search?: string;
+  assignedTo?: string;
+  project?: string;
 }
 
 export interface LeaveFilters {

@@ -25,7 +25,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
   section // NEW
 }) => {
   const { user } = useAuth();
-  const isOverdue = new Date(task.due_date) < new Date() && task.status !== 'completed';
+  // Helper to check if a date is before today
+  const isBeforeToday = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+  const dueDate = new Date(task.due_date);
+  const isOverdue = isBeforeToday(dueDate) && task.status !== 'completed';
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState({
     task_name: task.task_name,
@@ -153,7 +160,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
 
-      {isOverdue && (
+      {isOverdue && section !== 'today' && (
         <div className="mt-3 p-2 bg-red-100 rounded text-sm text-red-700">
           <AlertCircle className="w-4 h-4 inline mr-1" />
           This task is overdue

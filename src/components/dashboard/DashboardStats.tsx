@@ -10,13 +10,18 @@ interface DashboardStatsProps {
 
 const DashboardStats: React.FC<DashboardStatsProps> = ({ tasks, leaves }) => {
   const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const completedTasks = tasks.filter(task => task.status === 'completed').length;
-  const pendingTasks = tasks.filter(task => task.status === 'not_started' || task.status === 'in_progress').length;
-  // Blocked: status 'blocked' OR overdue (not completed and due_date < now)
+  const pendingTasks = tasks.filter(task => {
+    const due = new Date(task.due_date);
+    return (task.status === 'not_started' || task.status === 'in_progress' || task.status === 'pending') && due >= today;
+  }).length;
+  // Blocked: not completed and due before today, or status 'blocked'
   const blockedTasks = tasks.filter(task => {
-    if (task.status === 'blocked') return true;
-    if (task.status !== 'completed' && new Date(task.due_date) < now) return true;
-    return false;
+    const due = new Date(task.due_date);
+    return (task.status !== 'completed' && due < today) || task.status === 'blocked';
   }).length;
   const totalLeaves = leaves.length;
 

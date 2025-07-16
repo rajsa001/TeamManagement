@@ -19,7 +19,8 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
     description: '',
     due_date: '',
     user_id: user?.id || '',
-    project_id: ''
+    project_id: '',
+    status: 'pending',
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -57,11 +58,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
     e.preventDefault();
     const baseTask = {
       ...formData,
-      status: 'pending' as const,
       created_by: formData.user_id,
     };
     onSubmit(baseTask);
-    setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '' });
+    setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '', status: 'pending' });
     onClose();
   };
 
@@ -115,6 +115,24 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Status
+          </label>
+          <select
+            name="status"
+            value={formData.status}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          >
+            <option value="pending">Pending</option>
+            <option value="not_started">Not Started</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
         </div>
 
         {user?.role === 'admin' && (
