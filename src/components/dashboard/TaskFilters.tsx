@@ -45,34 +45,38 @@ const TaskFiltersComponent: React.FC<TaskFiltersProps> = ({
       </div>
 
       {/* Assigned To filter */}
-      <div className="flex items-center space-x-2">
-        <label className="text-sm text-gray-600">Assigned To:</label>
-        <select
-          value={filters.assignedTo || 'all'}
-          onChange={e => handleFilterChange('assignedTo', e.target.value)}
-          className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All</option>
-          {members.map(member => (
-            <option key={member.id} value={member.id}>{member.name}</option>
-          ))}
-        </select>
-      </div>
+      {showMemberFilter && (
+        <div className="flex items-center space-x-2">
+          <label className="text-sm text-gray-600">Assigned To:</label>
+          <select
+            value={filters.assignedTo || 'all'}
+            onChange={e => handleFilterChange('assignedTo', e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All</option>
+            {members.map(member => (
+              <option key={member.id} value={member.id}>{member.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Project filter */}
-      <div className="flex items-center space-x-2">
-        <label className="text-sm text-gray-600">Project:</label>
-        <select
-          value={filters.project || 'all'}
-          onChange={e => handleFilterChange('project', e.target.value)}
-          className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All</option>
-          {projects.map(project => (
-            <option key={project.id} value={project.id}>{project.name}</option>
-          ))}
-        </select>
-      </div>
+      {projects && projects.length > 0 && (
+        <div className="flex items-center space-x-2">
+          <label className="text-sm text-gray-600">Project:</label>
+          <select
+            value={filters.project || 'all'}
+            onChange={e => handleFilterChange('project', e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All</option>
+            {projects.map(project => (
+              <option key={project.id} value={project.id}>{project.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex items-center space-x-2">
         <label className="text-sm text-gray-600">Status:</label>
@@ -101,7 +105,8 @@ const TaskFiltersComponent: React.FC<TaskFiltersProps> = ({
         </select>
       </div>
 
-      {filters.status || filters.dueDateSort !== 'asc' || filters.search || filters.assignedTo || filters.project ? (
+      {/* Show Clear Filters button if any filter is set (including dueDateSort) */}
+      {Object.keys(filters).length > 0 ? (
         <Button
           variant="outline"
           size="sm"

@@ -266,20 +266,22 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
       />
       {/* Edit Leave Modal */}
       {editFormOpen && editLeave && (
-        <Modal isOpen={editFormOpen} onClose={() => setEditFormOpen(false)} title="Edit Leave">
-          <LeaveForm
-            isOpen={editFormOpen}
-            onClose={() => setEditFormOpen(false)}
-            onSubmit={leave => {
-              if (onUpdateLeave) onUpdateLeave({ ...editLeave, ...leave });
-              setEditFormOpen(false);
-              setEditLeave(null);
-            }}
-            selectedDate={editLeave.leave_date || undefined}
-            initialData={editLeave}
-            noModal={true}
+        <LeaveForm
+          isOpen={editFormOpen}
+          onClose={() => {
+            setEditFormOpen(false);
+            setEditLeave(null);
+          }}
+          onSubmit={leave => {
+            if (onUpdateLeave) onUpdateLeave({ ...editLeave, ...leave });
+            setEditFormOpen(false);
+            setEditLeave(null);
+          }}
+          selectedDate={editLeave.leave_date || undefined}
+          initialData={editLeave}
+          noModal={false}
           />
-        </Modal>
+        
       )}
       {/* Delete Confirmation Modal */}
       {deleteConfirmOpen && (

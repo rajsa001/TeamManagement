@@ -116,6 +116,22 @@ export const useTasks = () => {
         console.error('Failed to send admin automation webhook:', automationError);
       }
       // --- END NEW ---
+      // --- NEW: Send notification to member ---
+      try {
+        await supabase.from('notifications').insert([
+          {
+            user_id: data.user_id,
+            title: 'New Task Assigned',
+            message: `You have been assigned a new task: ${data.task_name}`,
+            type: 'task_assigned',
+            related_id: data.id,
+            related_type: 'task',
+          },
+        ]);
+      } catch (notifError) {
+        console.error('Failed to send notification to member:', notifError);
+      }
+      // --- END NOTIFICATION ---
       return true;
     }
     setError('Unknown error adding task');
@@ -123,9 +139,22 @@ export const useTasks = () => {
   };
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
+    if (!id || typeof id !== 'string') {
+      console.error('Invalid task id for updateTask:', id);
+      alert('Invalid task id. Cannot update task.');
+      return;
+    }
     // Find the previous task for status comparison
     const prevTask = tasks.find(task => task.id === id);
     const prevStatus = prevTask?.status;
+    // Only allow valid statuses
+    const validStatuses = ['pending', 'in_progress', 'completed', 'blocked', 'cancelled'];
+    if (updates.status && !validStatuses.includes(updates.status)) {
+      console.error('Invalid status for updateTask:', updates.status);
+      alert('Invalid status. Cannot update task.');
+      return;
+    }
+    console.log('Updating task with id:', id, 'updates:', updates);
     const { data, error } = await supabase
       .from('tasks')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -134,78 +163,105 @@ export const useTasks = () => {
       .single();
     if (error) {
       console.error('Error updating task:', error);
+      alert('Failed to update task: ' + (error.message || error.code));
+      return;
     }
-    if (data) {
-      setTasks(prev => prev.map(task => (task.id === id ? data : task)));
-      // Send webhook to n8n automation for task update (legacy)
-      try {
-        await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
+    if (!data) {
+      console.error('No task updated. Check if the id exists and user has permission.', { id, updates });
+      alert('No task was updated. The task may not exist or you may not have permission.');
+      return;
+    }
+    setTasks(prev => prev.map(task => (task.id === id ? data : task)));
+    // Send webhook to n8n automation for task update (legacy)
+    try {
+      await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: data.id,
+          task_name: data.task_name,
+          description: data.description,
+          assigned_to: data.user_id,
+          due_date: data.due_date,
+          created_by: data.created_by,
+          status: data.status,
+          member_email: user?.email || '',
+          event: 'task-updated',
+        }),
+      });
+    } catch (webhookError) {
+      console.error('Failed to send task updated webhook:', webhookError);
+    }
+    // --- NEW: Send to admin automation pipeline if status changed ---
+    try {
+      if (updates.status && prevStatus && updates.status !== prevStatus) {
+        // Fetch member name and email
+        let memberName = '';
+        let memberEmail = '';
+        let projectName = '';
+        if (data.user_id) {
+          const { data: member, error: memberError } = await supabase
+            .from('members')
+            .select('name, email')
+            .eq('id', data.user_id)
+            .single();
+          if (!memberError && member) {
+            memberName = member.name;
+            memberEmail = member.email;
+          }
+        }
+        if (data.project_id) {
+          const { data: project, error: projectError } = await supabase
+            .from('projects')
+            .select('name')
+            .eq('id', data.project_id)
+            .single();
+          if (!projectError && project) projectName = project.name;
+        }
+        await fetch('https://n8nautomation.site/webhook-test/onTaskUpdatedByAdmin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: data.id,
             task_name: data.task_name,
             description: data.description,
-            assigned_to: data.user_id,
             due_date: data.due_date,
-            created_by: data.created_by,
-            status: data.status,
-            member_email: user?.email || '',
-            event: 'task-updated',
+            assigned_date: data.created_at,
+            assigned_to: memberName,
+            assigned_to_email: memberEmail,
+            project_name: projectName,
+            updated_by: user?.name || '',
+            updated_status: updates.status,
+            previous_status: prevStatus,
+            status_updated_date: new Date().toISOString(),
           }),
         });
-      } catch (webhookError) {
-        console.error('Failed to send task updated webhook:', webhookError);
-      }
-      // --- NEW: Send to admin automation pipeline if status changed ---
-      try {
-        if (updates.status && prevStatus && updates.status !== prevStatus) {
-          // Fetch member name and email
-          let memberName = '';
-          let memberEmail = '';
-          let projectName = '';
-          if (data.user_id) {
-            const { data: member, error: memberError } = await supabase
-              .from('members')
-              .select('name, email')
-              .eq('id', data.user_id)
-              .single();
-            if (!memberError && member) {
-              memberName = member.name;
-              memberEmail = member.email;
-            }
-          }
-          if (data.project_id) {
-            const { data: project, error: projectError } = await supabase
-              .from('projects')
-              .select('name')
-              .eq('id', data.project_id)
-              .single();
-            if (!projectError && project) projectName = project.name;
-          } //The request for status update here.
-          await fetch('https://n8nautomation.site/webhook-test/onTaskUpdatedByAdmin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              task_name: data.task_name,
-              description: data.description,
-              due_date: data.due_date,
-              assigned_date: data.created_at,
-              assigned_to: memberName,
-              assigned_to_email: memberEmail,
-              project_name: projectName,
-              updated_by: user?.name || '',
-              updated_status: updates.status,
-              previous_status: prevStatus,
-              status_updated_date: new Date().toISOString(),
-            }),
+        // --- NEW: Send notification to member on status update ---
+        try {
+          console.log('Sending task status update notification:', {
+            user_id: data.user_id,
+            task_name: data.task_name,
+            prevStatus,
+            newStatus: updates.status,
           });
+          await supabase.from('notifications').insert([
+            {
+              user_id: data.user_id,
+              title: 'Task Status Updated',
+              message: `Status for task "${data.task_name}" changed to "${updates.status}"`,
+              type: 'task_status_updated',
+              related_id: data.id,
+              related_type: 'task',
+            },
+          ]);
+        } catch (notifError) {
+          console.error('Failed to send notification to member:', notifError);
         }
-      } catch (automationError) {
-        console.error('Failed to send admin automation update webhook:', automationError);
+        // --- END NOTIFICATION ---
       }
-      // --- END NEW ---
+    } catch (automationError) {
+      console.error('Failed to send admin automation update webhook:', automationError);
     }
+    // --- END NEW ---
   };
 
   const deleteTask = async (id: string) => {

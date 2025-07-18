@@ -15,6 +15,7 @@ import LeaveForm from './LeaveForm';
 import ProjectCard from './ProjectCard';
 import { useProjects } from '../../hooks/useProjects';
 import { supabase } from '../../lib/supabase';
+import Card from '../ui/Card';
 
 interface MemberDashboardProps {
   activeTab: string;
@@ -59,15 +60,39 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Add this function to handle notification removal
+  // Helper to get/set dismissed notifications in localStorage
+  const getDismissedNotifications = () => {
+    if (!user?.id) return [];
+    try {
+      return JSON.parse(localStorage.getItem(`dismissedNotifications_${user.id}`) || '[]');
+    } catch {
+      return [];
+    }
+  };
+  const addDismissedNotification = (notifId: string) => {
+    if (!user?.id) return;
+    const dismissed = getDismissedNotifications();
+    if (!dismissed.includes(notifId)) {
+      localStorage.setItem(
+        `dismissedNotifications_${user.id}`,
+        JSON.stringify([...dismissed, notifId])
+      );
+    }
+  };
+
+  // Update handleRemoveNotification to use local dismissal
   const handleRemoveNotification = async (id: string) => {
-    // Remove from Supabase
+    const notif = notifications.find(n => n.id === id);
+    const userId = user?.id;
+    console.log('Attempting to delete notification:', { id, notif, userId });
+    // Try to delete from Supabase (will fail silently if not allowed)
     await supabase.from('notifications').delete().eq('id', id);
-    // Remove from local state
+    // Always locally dismiss
+    addDismissedNotification(id);
     setNotifications(notifications => notifications.filter(n => n.id !== id));
   };
 
-  // Fetch notifications for the logged-in member
+  // Fetch notifications for the logged-in member, filter out dismissed
   React.useEffect(() => {
     const fetchNotifications = async () => {
       if (!user) return;
@@ -77,10 +102,45 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      if (!error && data) setNotifications(data);
+      if (!error && data) {
+        const dismissed = getDismissedNotifications();
+        setNotifications(data.filter(n => !dismissed.includes(n.id)));
+      }
       setNotificationsLoading(false);
     };
     fetchNotifications();
+
+    // --- Real-time notifications subscription ---
+    if (!user) return;
+    const channel = supabase.channel('notifications-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Realtime notification event received:', payload);
+          if (payload.new) {
+            const dismissed = getDismissedNotifications();
+            if (!dismissed.includes(payload.new.id)) {
+              setNotifications((prev) => [payload.new, ...prev]);
+            }
+          } else {
+            // Fallback: refetch notifications if payload is missing
+            fetchNotifications();
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscribed to notifications realtime:', status);
+      });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // --- END real-time ---
   }, [user]);
 
   const filteredTasks = filterTasks(taskFilters);
@@ -186,39 +246,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">My Dashboard</h1>
-          <button onClick={() => setShowNotifications(true)} className="p-2 rounded-full hover:bg-gray-100 relative">
-            <Bell className="w-6 h-6 text-gray-700" />
-            {notifications.length > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            )}
-          </button>
         </div>
-        
-        {/* Notifications Modal */}
-        <Modal isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="Notifications">
-          {notificationsLoading ? (
-            <div className="text-gray-500">Loading notifications...</div>
-          ) : notifications.length === 0 ? (
-            <div className="text-gray-500">No notifications.</div>
-          ) : (
-            <div className="space-y-2">
-              {notifications.map(n => (
-                <div key={n.id} className="p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded relative">
-                  <button
-                    className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
-                    onClick={() => handleRemoveNotification(n.id)}
-                    aria-label="Dismiss notification"
-                  >
-                    ×
-                  </button>
-                  <div className="font-semibold text-gray-900">{n.title}</div>
-                  <div className="text-sm text-gray-700">{n.message}</div>
-                  <div className="text-xs text-gray-500">{new Date(n.created_at).toLocaleString()}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
         
         <DashboardStats tasks={tasks} leaves={leaves} />
         
@@ -261,26 +289,35 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
                 })
                 .slice(0, 3)
                 .map(leave => (
-                  <div key={leave.id} className="p-3 bg-gray-50 rounded-lg">
-                    {leave.category === 'multi-day' ? (
-                      <>
-                        <div><strong>Type:</strong> Multi-day</div>
-                        <div><strong>Reason:</strong> {leave.reason}</div>
-                        <div><strong>From:</strong> {leave.from_date}</div>
-                        <div><strong>To:</strong> {leave.to_date}</div>
-                        <div><strong>Description:</strong> {leave.brief_description}</div>
-                        <div><strong>Status:</strong> {leave.status}</div>
-                      </>
-                    ) : (
-                      <>
-                        <div><strong>Type:</strong> Single Day</div>
-                        <div><strong>Date:</strong> {leave.leave_date}</div>
-                        <div><strong>Leave Type:</strong> {leave.leave_type}</div>
-                        <div><strong>Reason:</strong> {leave.reason}</div>
-                        <div><strong>Status:</strong> {leave.status}</div>
-                      </>
-                    )}
-                  </div>
+                  <Card key={leave.id} className="bg-white border border-gray-200">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-gray-900 text-base">{leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'} Leave</div>
+                      <div className="text-sm text-gray-700">
+                        {leave.category === 'multi-day' ? (
+                          <>
+                            <span className="font-medium">From:</span> {leave.from_date} <span className="mx-2">|</span> <span className="font-medium">To:</span> {leave.to_date}
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium">Date:</span> {leave.leave_date}
+                          </>
+                        )}
+                        <span className="mx-2">|</span><span className="font-medium">Leave Type:</span> {leave.leave_type}
+                      </div>
+                      <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
+                      {leave.category === 'multi-day' && (
+                        <div className="text-xs text-gray-500">Description: {leave.brief_description}</div>
+                      )}
+                      <div className="text-xs flex items-center gap-2">
+                        <span className="font-medium">Status:</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold 
+                          ${leave.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : ''}
+                          ${leave.status === 'approved' ? 'bg-green-100 text-green-800' : ''}
+                          ${leave.status === 'rejected' ? 'bg-red-100 text-red-800' : ''}
+                        `}>{leave.status}</span>
+                      </div>
+                    </div>
+                  </Card>
                 ))}
             </div>
           </div>
@@ -403,6 +440,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {projects.map(project => {
               const projectTasks = tasks.filter(task => task.project_id === project.id);
+              if (projectTasks.length === 0) return null;
               return (
                 <ProjectCard key={project.id} project={project} tasks={projectTasks} />
               );

@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import TaskCard from './TaskCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { Edit2, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import Button from '../ui/Button';
 
 interface ProjectCardProps {
   project: Project;
@@ -16,9 +18,8 @@ interface ProjectCardProps {
 }
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [], onDelete, onEdit, onStatusChange, onUpdate }) => {
-  // Remove internal state and fetching for tasks
   const { user } = useAuth();
-  const [showTasks, setShowTasks] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div className="bg-white rounded-lg shadow p-4 mb-4 border border-gray-100">
@@ -53,32 +54,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, isAdmin, tasks = [],
           <div className="text-gray-400 text-xs">Updated: {new Date(project.updated_at).toLocaleDateString()}</div>
         </>
       )}
-      <div className="mt-4">
-        <button
-          className="text-blue-600 hover:underline text-sm font-medium mb-2"
-          onClick={() => setShowTasks(v => !v)}
-        >
-          {showTasks ? 'Hide Tasks' : 'Show Tasks'}
-        </button>
-        {showTasks && (
-          <>
-            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Tasks for this project:</h4>
-            {tasks.length === 0 ? (
-              <div className="text-gray-500 text-xs">No tasks for this project.</div>
-            ) : (
-              <div className="space-y-2">
-                {tasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    showUser={true}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+      <Button
+        className="mt-2"
+        variant="primary"
+        onClick={() => navigate(`/projects/${project.id}/tasks`)}
+      >
+        Show Tasks
+      </Button>
     </div>
   );
 };

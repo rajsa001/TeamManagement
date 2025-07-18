@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Users, BarChart3, UserPlus } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { TaskFilters } from '../../types';
@@ -20,16 +20,17 @@ import { supabase } from '../../lib/supabase';
 import { Task } from '../../types';
 import { Project } from '../../types';
 import { authService } from '../../services/auth';
+import { useEffect } from 'react';
 
 interface AdminDashboardProps {
   activeTab: string;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
+  // All hooks at the top
   const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
   const { leaves, loading: leavesLoading, addLeave, deleteLeave, updateLeave } = useLeaves();
   const { projects, loading: projectsLoading, error: projectsError, addProject, updateProject, deleteProject, fetchProjects } = useProjects();
-  
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
@@ -40,6 +41,104 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     start_date: '',
     expected_end_date: ''
   });
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const { user } = useAuth();
+  const isSuperAdmin = user?.email === 'admin1@company.com';
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    new: '',
+    confirm: '',
+  });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [editProject, setEditProject] = useState<Project | null>(null);
+  const [editProjectForm, setEditProjectForm] = useState({
+    name: '',
+    description: '',
+    client_name: '',
+    start_date: '',
+    expected_end_date: ''
+  });
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [openSections, setOpenSections] = useState({
+    recentlyCompleted: false,
+    dueToday: false,
+    upcoming: false,
+    blocked: false,
+  });
+  const [showWorking, setShowWorking] = useState(false);
+  const [showLeave, setShowLeave] = useState(false);
+
+  const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
+  const [leaveBalancesLoading, setLeaveBalancesLoading] = useState(true);
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [editingBalances, setEditingBalances] = useState<{ [memberId: string]: boolean }>({});
+  const [balancesInput, setBalancesInput] = useState<any>({});
+  const [leaveDefaults, setLeaveDefaults] = useState({ sick_leaves: 30, casual_leaves: 30, paid_leaves: 30 });
+  const [editingDefaults, setEditingDefaults] = useState(false);
+  const [defaultsInput, setDefaultsInput] = useState({ sick_leaves: 30, casual_leaves: 30, paid_leaves: 30 });
+  const [savingMemberId, setSavingMemberId] = useState<string | null>(null);
+  const [editModalMemberId, setEditModalMemberId] = useState<string | null>(null);
+  const [modalInput, setModalInput] = useState<{ sick_leaves: number; casual_leaves: number; paid_leaves: number }>({ sick_leaves: 30, casual_leaves: 30, paid_leaves: 30 });
+  const [modalSaving, setModalSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [leavesSearch, setLeavesSearch] = useState('');
+  const [leavesDate, setLeavesDate] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
+  useEffect(() => {
+    if (activeTab === 'leaves') {
+      const fetchBalances = async () => {
+        const res = await supabase
+          .from('member_leave_balances')
+          .select('*');
+        setLeaveBalances(res.data || []);
+      };
+      fetchBalances();
+    }
+    if (activeTab === 'leaves' && user?.role === 'admin') {
+      const fetchDefaults = async () => {
+        const res = await supabase.from('leave_defaults').select('*').single();
+        if (res.data) {
+          setLeaveDefaults(res.data);
+          setDefaultsInput(res.data);
+        }
+      };
+      fetchDefaults();
+    }
+  }, [leaves, activeTab, user]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMembers = async () => {
+      const data = await authService.getMembers();
+      if (isMounted) setMembers(data.map(m => ({ id: m.id, name: m.name })));
+    };
+    fetchMembers();
+    const interval = setInterval(fetchMembers, 5000); // Poll every 5 seconds
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'leave-defaults' && isSuperAdmin) {
+      setLeaveBalancesLoading(true);
+      const fetchBalances = async () => {
+        const res = await supabase.from('member_leave_balances').select('*');
+        setLeaveBalances(res.data || []);
+        setLeaveBalancesLoading(false);
+        console.log('Fetched leave balances:', res.data);
+      };
+      fetchBalances();
+    }
+  }, [leaves, activeTab, isSuperAdmin]);
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -84,23 +183,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     }
   }
 
-  // Move these to the top of the component
-  const [editProfileOpen, setEditProfileOpen] = useState(false);
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
-  const { user } = useAuth();
-  const [profileForm, setProfileForm] = useState({
-    name: user?.name || '',
-    phone: user?.phone || '',
-  });
-  const [passwordForm, setPasswordForm] = useState({
-    current: '',
-    new: '',
-    confirm: '',
-  });
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
-
   // Profile update handler
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,15 +223,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     await addTask(task as any); // 'as any' to satisfy the type, since addTask expects created_by
   };
 
-  const [editProject, setEditProject] = useState<Project | null>(null);
-  const [editProjectForm, setEditProjectForm] = useState({
-    name: '',
-    description: '',
-    client_name: '',
-    start_date: '',
-    expected_end_date: ''
-  });
-
   const handleEditProject = (project: Project) => {
     setEditProject(project);
     setEditProjectForm({
@@ -172,14 +245,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     await deleteProject(id);
   };
 
-  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  // Helper to render section
+  const renderTaskSection = (title: string, Icon: any, tasks: any[], sectionKey: keyof typeof openSections, sectionName: string) => (
+    <div>
+      <div className="flex items-center gap-2 mb-4 group">
+        <Icon className="w-6 h-6 text-blue-600" />
+        <h2 className="text-xl font-extrabold text-gray-900 transition-transform duration-300 group-hover:scale-105">
+          {title}
+        </h2>
+      </div>
+      <div className="space-y-4">
+        {tasks.length === 0 ? (
+          <div className="text-gray-500">No {title.toLowerCase()}.</div>
+        ) : (
+          <>
+            <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+            {tasks.length > 1 && !openSections[sectionKey] && (
+              <button
+                onClick={() => toggleSection(sectionKey)}
+                className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                Load More
+              </button>
+            )}
+            {tasks.length > 1 && openSections[sectionKey] && (
+              <>
+                <div className="space-y-4">
+                  {tasks.slice(1).map(task => (
+                    <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+                  ))}
+                </div>
+                <button
+                  onClick={() => toggleSection(sectionKey)}
+                  className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  Show Less
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 
-  React.useEffect(() => {
-    authService.getMembers().then(data => {
-      setMembers(data.map(m => ({ id: m.id, name: m.name })));
-    });
-  }, []);
-
+  // Now, after all hooks, do conditional rendering:
   if (activeTab === 'dashboard') {
     // Date helpers
     const today = new Date();
@@ -213,61 +323,93 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
       return (task.status !== 'completed' && due < today) || task.status === 'blocked';
     });
 
+    // Calculate on leave and working today with names
+    const todayStr = today.toISOString().split('T')[0];
+    const onLeaveToday = members.filter(member =>
+      leaves.some(leave => {
+        if (leave.user_id !== member.id || leave.status !== 'approved') return false;
+        if (leave.category === 'multi-day') {
+          return leave.from_date <= todayStr && leave.to_date >= todayStr;
+        } else {
+          return leave.leave_date === todayStr;
+        }
+      })
+    );
+    const workingToday = members.filter(member => !onLeaveToday.some(l => l.id === member.id));
+
+    // After the four task sections, add a summary for leaves
+    // Calculate on leave and working today
+    const onLeaveCount = onLeaveToday.length;
+    // Assume members state contains all team members
+    const totalMembers = members.length;
+    const workingTodayCount = totalMembers - onLeaveCount;
+
+    // Personalized greeting logic
+    const getGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour < 12) return 'good morning';
+      if (hour < 18) return 'good afternoon';
+      return 'good evening';
+    };
+    const adminName = user?.name || 'Admin';
+
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+      <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
+        {/* Interactive animated greeting at the top */}
+        <div className="flex items-center justify-between pt-4 pb-2">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <span>
+              Hey <span className="text-blue-600 font-extrabold animate-pulse">{adminName}</span>, {getGreeting()} 
+            </span>
+            <span className="animate-waving-hand text-3xl ml-1" role="img" aria-label="wave">👋</span>
+          </h1>
         </div>
         <DashboardStats tasks={tasks} leaves={leaves} />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recently Completed Tasks</h2>
-            <div className="space-y-4">
-              {recentlyCompletedTasks.length === 0 ? (
-                <div className="text-gray-500">No recently completed tasks.</div>
-              ) : (
-                recentlyCompletedTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="completed" />
-                ))
-              )}
+        {/* Section title for leaves dashboard */}
+        <h2 className="text-xl font-semibold text-gray-800 mt-8 mb-2">Team Attendance Today</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto mb-8">
+          {/* Working today card */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow p-6 flex flex-col items-center">
+            <div className="text-2xl font-bold text-green-700 flex items-center gap-2">
+              <Users className="w-6 h-6 text-green-500" /> Working today - {workingTodayCount}
             </div>
+            <button
+              className="mt-3 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              onClick={() => setShowWorking(v => !v)}
+            >
+              {showWorking ? 'Hide' : 'Show'}
+            </button>
+            {showWorking && (
+              <ul className="mt-3 w-full text-center text-gray-700 text-base">
+                {workingTodayCount === 0 ? <li>No one working today</li> : workingToday.map(m => <li key={m.id}>{m.name}</li>)}
+              </ul>
+            )}
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Due Today</h2>
-            <div className="space-y-4">
-              {dueTodayTasks.length === 0 ? (
-                <div className="text-gray-500">No tasks due today.</div>
-              ) : (
-                dueTodayTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="today" />
-                ))
-              )}
+          {/* On Leave card */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow p-6 flex flex-col items-center">
+            <div className="text-2xl font-bold text-red-700 flex items-center gap-2">
+              <UserPlus className="w-6 h-6 text-red-500" /> On Leave - {onLeaveCount}
             </div>
+            <button
+              className="mt-3 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              onClick={() => setShowLeave(v => !v)}
+            >
+              {showLeave ? 'Hide' : 'Show'}
+            </button>
+            {showLeave && (
+              <ul className="mt-3 w-full text-center text-gray-700 text-base">
+                {onLeaveCount === 0 ? <li>No one on leave today</li> : onLeaveToday.map(m => <li key={m.id}>{m.name}</li>)}
+              </ul>
+            )}
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Tasks</h2>
-            <div className="space-y-4">
-              {upcomingTasks.length === 0 ? (
-                <div className="text-gray-500">No upcoming tasks.</div>
-              ) : (
-                upcomingTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="upcoming" />
-                ))
-              )}
-            </div>
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Blocked Tasks</h2>
-            <div className="space-y-4">
-              {blockedTasks.length === 0 ? (
-                <div className="text-gray-500">No blocked tasks.</div>
-              ) : (
-                blockedTasks.map(task => (
-                  <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section="blocked" />
-                ))
-              )}
-            </div>
-          </div>
+        </div>
+        {/* Section title for task overview */}
+        <h2 className="text-xl font-semibold text-gray-800 mt-10 mb-2">Task Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {renderTaskSection('Recently Completed Tasks', CheckCircle2, recentlyCompletedTasks, 'recentlyCompleted', 'completed')}
+          {renderTaskSection('Due Today', Calendar, dueTodayTasks, 'dueToday', 'today')}
+          {renderTaskSection('Upcoming Tasks', Clock, upcomingTasks, 'upcoming', 'upcoming')}
+          {renderTaskSection('Blocked Tasks', AlertCircle, blockedTasks, 'blocked', 'blocked')}
         </div>
       </div>
     );
@@ -329,52 +471,194 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   }
 
   if (activeTab === 'leaves') {
+    // Group leaves by member
+    const leavesByMember: { [memberId: string]: any[] } = {};
+    leaves.forEach(l => {
+      if (!leavesByMember[l.user_id]) leavesByMember[l.user_id] = [];
+      leavesByMember[l.user_id].push(l);
+    });
+
+    // Pending leaves
+    const pendingLeaves = leaves.filter(l => l.status === 'pending');
+
+    // Super-admin check
+    const isSuperAdmin = user?.email === 'admin1@gmail.com';
+
+    // Handle balance edit
+    const handleEditBalances = (memberId: string, balances: any) => {
+      setEditingBalances((prev) => ({ ...prev, [memberId]: true }));
+      setBalancesInput((prev: any) => ({ ...prev, [memberId]: { ...balances } }));
+    };
+    const handleSaveBalances = async (memberId: string) => {
+      setSavingMemberId(memberId);
+      const input = balancesInput[memberId];
+      await supabase
+        .from('member_leave_balances')
+        .upsert({
+          member_id: memberId,
+          year: new Date().getFullYear(),
+          sick_leaves: input.sick_leaves,
+          casual_leaves: input.casual_leaves,
+          paid_leaves: input.paid_leaves,
+          updated_at: new Date().toISOString(),
+        });
+      setEditingBalances((prev) => ({ ...prev, [memberId]: false }));
+      setLeaveBalancesLoading(true);
+      const res = await supabase
+        .from('member_leave_balances')
+        .select('*');
+      setLeaveBalances(res.data || []);
+      setLeaveBalancesLoading(false);
+      setSavingMemberId(null);
+      console.log('Refetched leave balances:', res.data);
+    };
+
+    const handleSaveDefaults = async () => {
+      await supabase.from('leave_defaults').upsert({
+        id: 1,
+        sick_leaves: defaultsInput.sick_leaves,
+        casual_leaves: defaultsInput.casual_leaves,
+        paid_leaves: defaultsInput.paid_leaves,
+      });
+      setLeaveDefaults(defaultsInput);
+      setEditingDefaults(false);
+    };
+
+    // Add search for Member Leave Balances & History
+    const filteredMembers = members.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()));
+
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">Team Leaves</h1>
         </div>
-
-        {leavesLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {leaves.length === 0 ? (
-              <div className="text-gray-500">No leave requests found.</div>
-            ) : (
-              leaves.map(leave => (
-                <div key={leave.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center">
-                  <div>
-                    <div className="font-semibold text-gray-900">{leave.user?.name || 'Unknown User'}</div>
-                    <div className="text-sm text-gray-600">
-                      <strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}
+        {/* Pending Leaves Section (no search/filter) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Pending Leaves</h2>
+          {pendingLeaves.length === 0 ? (
+            <div className="text-gray-500">No pending leave requests.</div>
+          ) : (
+            <div className="grid gap-4">
+              {pendingLeaves.map(leave => (
+                <Card key={leave.id} className="flex flex-col md:flex-row justify-between items-start md:items-center border border-gray-200 bg-white">
+                  <div className="flex-1 space-y-1">
+                    <div className="font-semibold text-gray-900 text-base">{leave.user?.name || 'Unknown User'}</div>
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium">Type:</span> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}
                       {leave.category === 'multi-day' ? (
                         <>
-                          {' | '}<strong>From:</strong> {leave.from_date} <strong>To:</strong> {leave.to_date}
+                          <span className="mx-2">|</span><span className="font-medium">From:</span> {leave.from_date} <span className="font-medium">To:</span> {leave.to_date}
                         </>
                       ) : (
                         <>
-                          {' | '}<strong>Date:</strong> {leave.leave_date}
+                          <span className="mx-2">|</span><span className="font-medium">Date:</span> {leave.leave_date}
                         </>
                       )}
-                      {' | '}<strong>Leave Type:</strong> {leave.leave_type}
+                      <span className="mx-2">|</span><span className="font-medium">Leave Type:</span> {leave.leave_type}
                     </div>
                     <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
-                    <div className="text-xs text-gray-500">Status: <span className={leave.status === 'pending' ? 'text-yellow-600' : leave.status === 'approved' ? 'text-green-600' : 'text-red-600'}>{leave.status}</span></div>
+                    <div className="text-xs flex items-center gap-2">
+                      <span className="font-medium">Status:</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold 
+                        ${leave.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : ''}
+                        ${leave.status === 'approved' ? 'bg-green-100 text-green-800' : ''}
+                        ${leave.status === 'rejected' ? 'bg-red-100 text-red-800' : ''}
+                      `}>{leave.status}</span>
+                    </div>
                   </div>
-                  {leave.status === 'pending' && (
-                    <div className="flex space-x-2">
-                      <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Approve</Button>
-                      <Button variant="danger" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'rejected', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Decline</Button>
+                  <div className="flex flex-row md:flex-col gap-2 mt-4 md:mt-0 md:ml-6">
+                    <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Approve</Button>
+                    <Button variant="danger" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'rejected', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Decline</Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Member Balances & History Section */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2 mt-8">Member Leave Balances & History</h2>
+          <input
+            type="text"
+            placeholder="Search member by name..."
+            value={memberSearch}
+            onChange={e => setMemberSearch(e.target.value)}
+            className="border rounded px-3 py-2 w-full md:w-64 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+          />
+          <div className="space-y-4">
+            {filteredMembers.map(member => {
+              const balances = leaveBalances.find((b: any) => b.member_id === member.id && b.year === new Date().getFullYear());
+              const memberLeaves = leavesByMember[member.id] || [];
+              return (
+                <Card key={member.id} className="border border-gray-200 bg-white">
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedMember(expandedMember === member.id ? null : member.id)}>
+                    <div className="font-semibold text-gray-900 text-base py-2">{member.name}</div>
+                    <Button size="sm" variant="outline">{expandedMember === member.id ? 'Hide' : 'Show'}</Button>
+                  </div>
+                  {expandedMember === member.id && (
+                    <div className="p-4 border-t mt-2">
+                      <div className="mb-2 font-medium text-gray-700">Leave Balances ({new Date().getFullYear()}):</div>
+                      {balances ? (
+                        <div className="flex gap-4 items-center mb-4">
+                          {isSuperAdmin && editingBalances[member.id] ? (
+                            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                              <label className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Sick</span>
+                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.sick_leaves ?? balances?.sick_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], sick_leaves: +e.target.value } }))} />
+                              </label>
+                              <label className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Casual</span>
+                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.casual_leaves ?? balances?.casual_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], casual_leaves: +e.target.value } }))} />
+                              </label>
+                              <label className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Paid</span>
+                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.paid_leaves ?? balances?.paid_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], paid_leaves: +e.target.value } }))} />
+                              </label>
+                              <div className="flex gap-2 ml-2 mt-2 md:mt-0">
+                                <Button size="sm" variant="primary" onClick={() => handleSaveBalances(member.id)} disabled={savingMemberId === member.id}>
+                                  {savingMemberId === member.id ? 'Saving...' : 'Save'}
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingBalances((prev) => ({ ...prev, [member.id]: false }))} disabled={savingMemberId === member.id}>Cancel</Button>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-2 w-full">These values override the default for this member for the year.</div>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances.sick_leaves}</span>
+                              <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances.casual_leaves}</span>
+                              <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances.paid_leaves}</span>
+                              {isSuperAdmin && (
+                                <Button size="sm" variant="outline" onClick={() => handleEditBalances(member.id, balances)}>Edit</Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-gray-500">No balance record for this year.</div>
+                      )}
+                      <div className="mb-2 font-medium text-gray-700">Leave History:</div>
+                      <div className="space-y-2">
+                        {memberLeaves.length === 0 ? (
+                          <div className="text-gray-500">No leaves found.</div>
+                        ) : (
+                          memberLeaves.map(lv => (
+                            <div key={lv.id} className="border rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50">
+                              <div>
+                                <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${lv.from_date} to ${lv.to_date}` : lv.leave_date}
+                                <span className="ml-2 text-xs">({lv.status})</span>
+                              </div>
+                              <div className="text-xs text-gray-500">Reason: {lv.reason}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
-              ))
-            )}
+                </Card>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -723,6 +1007,126 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           <h1 className="text-2xl font-bold text-gray-900">Admin Management</h1>
         </div>
         <AdminsList />
+      </div>
+    );
+  }
+
+  if (activeTab === 'leave-defaults' && isSuperAdmin) {
+    if (leaveBalancesLoading || members.length === 0) {
+      return <div className="text-center py-8 text-gray-500">Loading leave balances...</div>;
+    }
+    const filteredMembers = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+
+    // Date display
+    const today = new Date();
+    const year = today.getFullYear();
+    const nextYear = year + 1;
+    const calendarYear = `${year}-${nextYear}`;
+    const todayDay = today.getDate();
+    const todayMonth = today.toLocaleString(undefined, { month: 'short' });
+    const todayYear = today.getFullYear();
+
+    // Modal handlers scoped here
+    const openEditModal = (memberId: string, balances: any) => {
+      setEditModalMemberId(memberId);
+      setModalInput({
+        sick_leaves: balances?.sick_leaves ?? 30,
+        casual_leaves: balances?.casual_leaves ?? 30,
+        paid_leaves: balances?.paid_leaves ?? 30,
+      });
+    };
+    const closeEditModal = () => {
+      setEditModalMemberId(null);
+      setModalInput({ sick_leaves: 30, casual_leaves: 30, paid_leaves: 30 });
+      setModalSaving(false);
+    };
+    const handleModalSave = async () => {
+      if (!editModalMemberId) return;
+      setModalSaving(true);
+      await supabase
+        .from('member_leave_balances')
+        .upsert([
+          {
+            member_id: editModalMemberId,
+            year: year,
+            sick_leaves: modalInput.sick_leaves,
+            casual_leaves: modalInput.casual_leaves,
+            paid_leaves: modalInput.paid_leaves,
+            updated_at: new Date().toISOString(),
+          }
+        ], { onConflict: 'member_id,year' });
+      setLeaveBalancesLoading(true);
+      const res = await supabase
+        .from('member_leave_balances')
+        .select('*');
+      setLeaveBalances(res.data || []);
+      setLeaveBalancesLoading(false);
+      setModalSaving(false);
+      setEditModalMemberId(null);
+    };
+
+    return (
+      <div className="space-y-8 max-w-2xl mx-auto mt-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
+          <div>
+            <h1 className="text-2xl font-bold text-blue-800 mb-1 animate-pulse">Leaves Management</h1>
+            <div className="flex items-center gap-6 text-sm text-gray-700 mt-2">
+              <span className="font-semibold animate-fade-in">Year: <span className="text-blue-600 font-bold animate-pulse-slow">{calendarYear}</span></span>
+              <span className="font-semibold animate-fade-in">Today: <span className="text-green-600 font-bold animate-pulse-slow">{today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span></span>
+            </div>
+          </div>
+          <input
+            type="text"
+            placeholder="Search member by name..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border rounded px-3 py-2 w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+          />
+        </div>
+        <div className="space-y-4">
+          {filteredMembers.length === 0 ? (
+            <div className="text-gray-500 text-center">No members found.</div>
+          ) : filteredMembers.map(member => {
+            const balances = leaveBalances.find((b: any) => b.member_id === member.id && b.year === year);
+            return (
+              <Card key={member.id} className="border border-gray-200 bg-white p-4 flex flex-col md:flex-row md:items-center md:justify-between">
+                <div className="font-semibold text-gray-900 text-base mb-2 md:mb-0">{member.name}</div>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
+                  <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
+                  <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
+                  <Button size="sm" variant="outline" onClick={() => openEditModal(member.id, balances)}>Edit</Button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+        {/* Modal for editing leave balances */}
+        {editModalMemberId && (
+          <Modal isOpen={!!editModalMemberId} onClose={closeEditModal} title="Edit Leave Balances">
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3">
+                <label className="flex items-center gap-2">
+                  <span className="w-20">Sick</span>
+                  <input type="number" className="border rounded px-2 py-1 w-24" value={modalInput.sick_leaves} onChange={e => setModalInput(prev => ({ ...prev, sick_leaves: +e.target.value }))} />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="w-20">Casual</span>
+                  <input type="number" className="border rounded px-2 py-1 w-24" value={modalInput.casual_leaves} onChange={e => setModalInput(prev => ({ ...prev, casual_leaves: +e.target.value }))} />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="w-20">Paid</span>
+                  <input type="number" className="border rounded px-2 py-1 w-24" value={modalInput.paid_leaves} onChange={e => setModalInput(prev => ({ ...prev, paid_leaves: +e.target.value }))} />
+                </label>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <Button size="sm" variant="primary" onClick={handleModalSave} disabled={modalSaving}>{modalSaving ? 'Saving...' : 'Save'}</Button>
+                <Button size="sm" variant="outline" onClick={closeEditModal} disabled={modalSaving}>Cancel</Button>
+              </div>
+              <div className="text-xs text-gray-500 mt-2">These values override the default for this member for the year.</div>
+            </div>
+          </Modal>
+        )}
       </div>
     );
   }

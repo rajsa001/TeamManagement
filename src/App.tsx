@@ -9,7 +9,9 @@ import AdminDashboard from './components/dashboard/AdminDashboard';
 import MemberProfile from './components/dashboard/MemberProfile';
 import AdminProfile from './components/dashboard/AdminProfile';
 import Reports from './components/dashboard/Reports';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import ProjectTasksPage from './components/dashboard/ProjectTasksPage';
+import Footer from './components/layout/Footer';
 
 const AppContent: React.FC = () => {
   const { user } = useAuth();
@@ -33,11 +35,11 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       <main
-        className="transition-all duration-500"
+        className="flex-1 transition-all duration-500 pr-4 md:pr-8 lg:pr-16"
         style={{
           paddingLeft: (sidebarOpen ? SIDEBAR_MAX_WIDTH : SIDEBAR_MIN_WIDTH) + SIDEBAR_GAP,
         }}
@@ -52,6 +54,7 @@ const AppContent: React.FC = () => {
           <MemberDashboard activeTab={activeTab} />
         )}
       </main>
+      <Footer />
     </div>
   );
 };
@@ -60,7 +63,10 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <AppContent />
+        <Routes>
+          <Route path="/projects/:projectId/tasks" element={<ProjectTasksPage />} />
+          <Route path="*" element={<AppContent />} />
+        </Routes>
       </BrowserRouter>
     </AuthProvider>
   );

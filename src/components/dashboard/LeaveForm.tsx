@@ -35,6 +35,9 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     id: undefined,
   });
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [error, setError] = useState('');
+
   useEffect(() => {
     if (initialData && isOpen) {
       setFormData({
@@ -62,6 +65,27 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    // Validation for past dates
+    if (formData.category === 'single-day') {
+      if (formData.leave_date < todayStr) {
+        setError('You cannot select a past date for leave.');
+        return;
+      }
+    } else {
+      if (formData.from_date < todayStr || formData.to_date < todayStr) {
+        setError('You cannot select past dates for leave.');
+        return;
+      }
+      if (formData.to_date < formData.from_date) {
+        setError('To Date cannot be before From Date.');
+        return;
+      }
+      if (!formData.leave_type) {
+        setError('Please select a leave type.');
+        return;
+      }
+    }
     onSubmit(formData);
     setFormData({
       category: 'single-day',
@@ -116,6 +140,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
+              min={todayStr}
             />
           </div>
           <div>
@@ -175,6 +200,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
+              min={todayStr}
             />
           </div>
           <div>
@@ -188,7 +214,25 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
+              min={formData.from_date || todayStr}
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Leave Type
+            </label>
+            <select
+              name="leave_type"
+              value={formData.leave_type}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Select Leave Type</option>
+              <option value="casual">Casual Leave</option>
+              <option value="sick">Sick Leave</option>
+              <option value="paid">Paid Leave</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -206,6 +250,8 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
           </div>
         </>
       )}
+
+      {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
 
       <div className="flex justify-end space-x-3 pt-4">
         <Button variant="outline" onClick={onClose} type="button">

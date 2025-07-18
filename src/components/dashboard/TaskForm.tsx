@@ -10,17 +10,18 @@ interface TaskFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (task: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => void;
+  initialProjectId?: string;
 }
 
-const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
+const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialProjectId }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
     task_name: '',
     description: '',
     due_date: '',
     user_id: user?.id || '',
-    project_id: '',
-    status: 'pending',
+    project_id: initialProjectId || '',
+    status: 'pending' as Task['status'],
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -53,6 +54,12 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
       setFormData(prev => ({ ...prev, user_id: user.id }));
     }
   }, [isOpen, user]);
+
+  useEffect(() => {
+    if (isOpen && initialProjectId) {
+      setFormData(prev => ({ ...prev, project_id: initialProjectId }));
+    }
+  }, [isOpen, initialProjectId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,9 +136,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
             required
           >
             <option value="pending">Pending</option>
-            <option value="not_started">Not Started</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
+            <option value="blocked">Blocked</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
 
@@ -176,6 +184,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit }) => {
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
+              disabled={!!initialProjectId}
             >
               <option value="">Select Project</option>
               {projects.map(project => (

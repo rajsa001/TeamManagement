@@ -8,7 +8,8 @@ import {
   UserPlus,
   Folder,
   User,
-  BarChart2
+  BarChart2,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavLink } from 'react-router-dom'; // Added for NavLink
@@ -19,21 +20,24 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  unreadNotifications: number; // Added unreadNotifications prop
 }
 
 // Sidebar widths for layout adjustment
 export const SIDEBAR_MIN_WIDTH = 64; // px (w-16)
 export const SIDEBAR_MAX_WIDTH = 256; // px (w-64)
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIsOpen }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIsOpen, unreadNotifications }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin'; // Added isAdmin state
+  const isSuperAdmin = user?.email === 'admin1@company.com';
 
   const memberTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tasks', label: 'My Tasks', icon: CheckSquare },
     { id: 'leaves', label: 'My Leaves', icon: Calendar },
     { id: 'projects', label: 'Projects', icon: BarChart3 },
+    { id: 'notifications', label: 'Notifications', icon: Bell }, // Notifications tab
     { id: 'profile', label: 'Profile', icon: Users },
   ];
 
@@ -47,6 +51,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'admin-management', label: 'Admin Management', icon: UserPlus },
   ];
+  if (isSuperAdmin) {
+    adminTabs.splice(3, 0, { id: 'leave-defaults', label: 'Leave Management', icon: Calendar });
+  }
 
   const tabs = user?.role === 'admin' ? adminTabs : memberTabs;
 
@@ -83,8 +90,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
                     transitionDelay: `${idx * 40}ms`,
                   }}
                 >
-                  <span className={`transition-transform duration-500 ${isOpen ? 'scale-110' : 'scale-100'}`}>
+                  <span className={`transition-transform duration-500 ${isOpen ? 'scale-110' : 'scale-100'} relative`}>
                     <Icon className="w-6 h-6" />
+                    {tab.id === 'notifications' && unreadNotifications > 0 && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                    )}
                   </span>
                   <span
                     className={`ml-3 whitespace-nowrap font-medium text-base transition-all duration-500
