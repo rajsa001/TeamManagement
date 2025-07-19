@@ -22,6 +22,7 @@ import { Project } from '../../types';
 import { authService } from '../../services/auth';
 import { useEffect } from 'react';
 import { format } from 'timeago.js';
+import { toast } from 'react-toastify';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -30,7 +31,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   // All hooks at the top
   const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
-  const { leaves, loading: leavesLoading, addLeave, deleteLeave, updateLeave } = useLeaves();
+  const { leaves, loading: leavesLoading, addLeave, deleteLeave, updateLeave, setLeaves } = useLeaves();
   const { projects, loading: projectsLoading, error: projectsError, addProject, updateProject, deleteProject, fetchProjects } = useProjects();
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
@@ -160,6 +161,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     };
   }, []);
 
+  // Real-time subscription for tasks (admin sees all changes)
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+    const channel = supabase.channel('tasks-realtime-admin')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        (payload) => {
+          // On any change, refetch tasks
+          refetchTasks();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const filteredTasks = filterTasks(taskFilters);
 
   const handleStatusChange = (id: string, status: 'not_started' | 'in_progress' | 'completed') => {
@@ -168,8 +191,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
 
   // Add this handler for editing tasks
   const handleTaskUpdate = async (id: string, updates: Partial<Task>) => {
-    await updateTask(id, updates);
+    const updated = await updateTask(id, updates);
     await refetchTasks();
+    // --- Insert notification for member if status is updated by admin ---
+    if (updates.status && user?.role === 'admin' && updated && updated.user_id) {
+      // Prevent duplicate notification
+      console.log('ADMIN: Inserting notification for member', updated.user_id, id, updates.status);
+      const { data: existing, error: existingError } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', updated.user_id)
+        .eq('type', 'task_status_updated')
+        .eq('related_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (!existingError && existing && existing.length > 0) {
+        // Notification already exists, skip insert
+      } else {
+        let emoji = '';
+        let statusText = '';
+        if (updates.status === 'completed') {
+          emoji = '🎉';
+          statusText = 'completed';
+        } else if (updates.status === 'in_progress') {
+          emoji = '⏳';
+          statusText = 'in progress';
+        } else if (updates.status === 'blocked') {
+          emoji = '🛑';
+          statusText = 'blocked';
+        } else if (updates.status === 'pending') {
+          emoji = '⏳';
+          statusText = 'pending';
+        } else if (updates.status === 'cancelled') {
+          emoji = '🚫';
+          statusText = 'cancelled';
+        }
+        await supabase.from('notifications').insert([
+          {
+            user_id: updated.user_id,
+            title: `${emoji} Task Status Updated`,
+            message: `Status for task "${updated.task_name}" changed to ${statusText}.`,
+            type: 'task_status_updated',
+            related_id: id,
+            related_type: 'task',
+          },
+        ]);
+      }
+    }
   };
 
   async function handleApproveDeclineLeave(leaveId: string, status: 'approved' | 'rejected', userId: string, leaveDate: string, endDate: string | null, leaveType: string, category?: string, from_date?: string | null, to_date?: string | null) {

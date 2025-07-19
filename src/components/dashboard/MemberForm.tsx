@@ -4,6 +4,7 @@ import { authService } from '../../services/auth';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { Member } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface MemberFormProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, ini
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { user } = useAuth();
 
   useEffect(() => {
     if (initialData) {
@@ -58,7 +60,7 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, ini
         const updates: any = { ...formData };
         delete updates.password;
         if (!formData.password) delete updates.password;
-        await authService.updateMember(initialData.id, updates);
+        await authService.updateMember(initialData.id, updates, user && user.role === 'admin' ? { id: user.id, name: user.name } : undefined);
       } else {
         await authService.createMember(formData);
       }

@@ -90,7 +90,7 @@ export const authService = {
     }
   },
 
-  async updateMember(id: string, updates: Partial<Member>): Promise<Member> {
+  async updateMember(id: string, updates: Partial<Member>, adminUser?: { id: string; name: string }): Promise<Member> {
     const { data, error } = await supabase
       .from('members')
       .update(updates)
@@ -98,6 +98,26 @@ export const authService = {
       .select()
       .single();
     if (error) throw new Error('Failed to update member');
+    // --- NEW: Send notification to member if updated by admin ---
+    if (adminUser) {
+      console.log('NOTIF DEBUG', {adminUser, id, updates});
+      try {
+        await supabase.from('notifications').insert([
+          {
+            user_id: id,
+            title: '👤 Profile Updated',
+            message: `Your profile was updated by admin${adminUser.name ? ' ' + adminUser.name : ''}. If you did not request this change, please contact support.`,
+            type: 'system', // changed from 'profile_updated_by_admin' to 'system'
+            related_id: id,
+            related_type: 'user', // changed from 'member' to 'user'
+          },
+        ]);
+      } catch (notifError) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to send profile update notification to member:', notifError);
+      }
+    }
+    // --- END NEW ---
     return data;
   },
 

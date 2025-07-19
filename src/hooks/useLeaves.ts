@@ -184,5 +184,6 @@ export const useLeaves = () => {
     updateLeave,
     deleteLeave,
     filterLeaves,
+    setLeaves, // <-- Export setLeaves
   };
 };

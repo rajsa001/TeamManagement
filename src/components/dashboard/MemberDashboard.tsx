@@ -17,6 +17,7 @@ import { useProjects } from '../../hooks/useProjects';
 import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
 import { useEffect } from 'react';
+import { toast } from 'sonner';
 
 interface MemberDashboardProps {
   activeTab: string;
@@ -128,10 +129,16 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         .order('created_at', { ascending: false });
       if (!error && data) {
         const dismissed = getDismissedNotifications();
-        const filtered = data.filter(n => !dismissed.includes(n.id));
-        setNotifications(filtered);
+        // Deduplicate notifications by id
+        const unique = Object.values(
+          data.filter(n => !dismissed.includes(n.id)).reduce((acc, n) => {
+            acc[n.id] = n;
+            return acc;
+          }, {} as Record<string, any>)
+        );
+        setNotifications(unique);
         // Dispatch event for notification dot
-        window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: filtered.some(n => !n.is_read) } }));
+        window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: unique.some(n => !n.is_read) } }));
       }
       setNotificationsLoading(false);
     };
@@ -154,9 +161,21 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             const dismissed = getDismissedNotifications();
             if (!dismissed.includes(payload.new.id)) {
               setNotifications((prev) => {
-                const updated = [payload.new, ...prev];
+                if (prev.some(n => n.id === payload.new.id)) return prev;
+                const updated = [payload.new, ...prev.filter(n => n.id !== payload.new.id)];
                 window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: updated.some(n => !n.is_read) } }));
                 return updated;
+              });
+              // Always show toast for any notification (blue)
+              let dateTime = '';
+              if (payload.new.created_at) {
+                const d = new Date(payload.new.created_at);
+                dateTime = `${d.getDate().toString().padStart(2, '0')} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+              }
+              toast(payload.new.title, {
+                description: `${payload.new.message}${dateTime ? `\n${dateTime}` : ''}`,
+                style: { background: '#2563eb', color: 'white' },
+                duration: 4500,
               });
             }
           } else {
@@ -173,6 +192,9 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     };
     // --- END real-time ---
   }, [user]);
+
+  // Remove the real-time subscription for tasks (member sees all changes to their tasks)
+  // (Revert: delete the useEffect with channel 'tasks-realtime-member')
 
   const filteredTasks = filterTasks(taskFilters);
 
