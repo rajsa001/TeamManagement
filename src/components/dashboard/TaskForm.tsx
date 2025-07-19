@@ -79,6 +79,8 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
     }));
   };
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add New Task">
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -121,6 +123,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
+            min={todayStr}
           />
         </div>
 

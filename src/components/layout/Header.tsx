@@ -1,11 +1,22 @@
 import React, { useState } from 'react';
-import { LogOut, User, Settings } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../ui/Button';
 
 const Header: React.FC = () => {
   const { user, logout } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  // Notification state (to be provided via props or context)
+  // Removed unused showNotifications
+  const [hasUnread, setHasUnread] = useState(false);
+  // Listen for custom event from MemberDashboard to update notification dot
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      setHasUnread(e.detail.hasUnread);
+    };
+    window.addEventListener('notifications-dot', handler);
+    return () => window.removeEventListener('notifications-dot', handler);
+  }, []);
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -25,7 +36,7 @@ const Header: React.FC = () => {
                 {user?.role}
               </span>
             </div>
-            
+            {/* Removed Notification Icon */}
             <div className="flex items-center space-x-2">
               <Button
                 variant="danger"

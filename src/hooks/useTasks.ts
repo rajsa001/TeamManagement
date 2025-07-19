@@ -32,6 +32,29 @@ export const useTasks = () => {
     if (user) refetchTasks();
   }, [user]);
 
+  // Add real-time subscription for tasks
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel('tasks-realtime-member')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          // On any change, refetch tasks
+          refetchTasks();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const addTask = async (taskData: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'user'> & { created_by: string }) => {
     setError(null);
     // Log the payload for debugging
@@ -132,6 +155,34 @@ export const useTasks = () => {
         console.error('Failed to send notification to member:', notifError);
       }
       // --- END NOTIFICATION ---
+      // --- NEW: If member adds a task for himself, notify admin ---
+      try {
+        if (user?.role !== 'admin' && data.user_id === user?.id) {
+          // Find admin user(s)
+          const { data: admins } = await supabase
+            .from('admins')
+            .select('id')
+            .neq('email', '')
+            .neq('id', user.id);
+          if (admins && admins.length > 0) {
+            await Promise.all(admins.map((admin: any) =>
+              supabase.from('notifications').insert([
+                {
+                  user_id: admin.id,
+                  title: 'Member Added Task',
+                  message: `${user?.name || 'A member'} added a new task: ${data.task_name}`,
+                  type: 'task_added_by_member',
+                  related_id: data.id,
+                  related_type: 'task',
+                },
+              ])
+            ));
+          }
+        }
+      } catch (notifError) {
+        console.error('Failed to send notification to admin (member added task):', notifError);
+      }
+      // --- END NEW ---
       return true;
     }
     setError('Unknown error adding task');
@@ -260,6 +311,34 @@ export const useTasks = () => {
       }
     } catch (automationError) {
       console.error('Failed to send admin automation update webhook:', automationError);
+    }
+    // --- END NEW ---
+    // --- NEW: If member updates a task status, notify admin ---
+    try {
+      if (user?.role !== 'admin' && updates.status && prevStatus && updates.status !== prevStatus) {
+        // Find admin user(s)
+        const { data: admins } = await supabase
+          .from('admins')
+          .select('id')
+          .neq('email', '')
+          .neq('id', user.id);
+        if (admins && admins.length > 0) {
+          await Promise.all(admins.map((admin: any) =>
+            supabase.from('notifications').insert([
+              {
+                user_id: admin.id,
+                title: 'Task Status Updated by Member',
+                message: `${user?.name || 'A member'} updated status for task "${data.task_name}" to "${updates.status}"`,
+                type: 'task_status_updated_by_member',
+                related_id: data.id,
+                related_type: 'task',
+              },
+            ])
+          ));
+        }
+      }
+    } catch (notifError) {
+      console.error('Failed to send notification to admin (member updated task):', notifError);
     }
     // --- END NEW ---
   };

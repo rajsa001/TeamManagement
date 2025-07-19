@@ -20,7 +20,7 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  unreadNotifications: number; // Added unreadNotifications prop
+  unreadNotifications: number;
 }
 
 // Sidebar widths for layout adjustment
@@ -30,7 +30,7 @@ export const SIDEBAR_MAX_WIDTH = 256; // px (w-64)
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIsOpen, unreadNotifications }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin'; // Added isAdmin state
-  const isSuperAdmin = user?.email === 'admin1@company.com';
+  const isSuperAdmin = user?.email === 'rathorerajpal18112003@gmail.com';
 
   const memberTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -48,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
     { id: 'team', label: 'Team', icon: Users },
     { id: 'reports', label: 'Reports', icon: BarChart2 }, // Use BarChart2 for Reports
     { id: 'projects', label: 'Projects', icon: Folder },
+    { id: 'notifications', label: 'Notifications', icon: Bell }, // Notifications tab for admin
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'admin-management', label: 'Admin Management', icon: UserPlus },
   ];

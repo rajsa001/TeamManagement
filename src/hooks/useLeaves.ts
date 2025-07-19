@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Leave, LeaveFilters } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -8,8 +8,10 @@ export const useLeaves = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const subscriptionRef = useRef<any>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const loadLeaves = async () => {
       setLoading(true);
       let query = supabase
@@ -21,14 +23,45 @@ export const useLeaves = () => {
       const { data, error } = await query.order('created_at', { ascending: false });
       if (error) {
         console.error('Error fetching leaves:', error);
-        setLeaves([]);
+        if (isMounted) setLeaves([]);
       } else {
-        console.log('Fetched leaves:', data);
-        setLeaves(data || []);
+        if (isMounted) setLeaves(data || []);
       }
-      setLoading(false);
+      if (isMounted) setLoading(false);
     };
     if (user) loadLeaves();
+
+    // Setup Supabase real-time subscription
+    if (user) {
+      // Unsubscribe previous if any
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current);
+        subscriptionRef.current = null;
+      }
+      // Subscribe to all changes on 'leaves'
+      const channel = supabase.channel('leaves-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leaves',
+          },
+          async (payload) => {
+            // Refetch all leaves on any change (insert/update/delete)
+            await loadLeaves();
+          }
+        )
+        .subscribe();
+      subscriptionRef.current = channel;
+    }
+    return () => {
+      isMounted = false;
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current);
+        subscriptionRef.current = null;
+      }
+    };
   }, [user]);
 
   const addLeave = async (leaveData: Omit<Leave, 'id' | 'created_at' | 'updated_at' | 'user'>) => {

@@ -63,29 +63,8 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     }
   }, [isOpen, user, initialData]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    // Validation for past dates
-    if (formData.category === 'single-day') {
-      if (formData.leave_date < todayStr) {
-        setError('You cannot select a past date for leave.');
-        return;
-      }
-    } else {
-      if (formData.from_date < todayStr || formData.to_date < todayStr) {
-        setError('You cannot select past dates for leave.');
-        return;
-      }
-      if (formData.to_date < formData.from_date) {
-        setError('To Date cannot be before From Date.');
-        return;
-      }
-      if (!formData.leave_type) {
-        setError('Please select a leave type.');
-        return;
-      }
-    }
     onSubmit(formData);
     setFormData({
       category: 'single-day',

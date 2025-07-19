@@ -179,8 +179,8 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
             }
           });
 
-          // Disable selection if any leave exists for this day
-          const isDisabled = leavesForDay.length > 0;
+          // In the calendar grid, only disable if there is a non-declined leave for the day
+          const isDisabled = leavesForDay.some(l => l.status !== 'rejected');
 
           const isToday =
             day === new Date().getDate() &&
@@ -221,37 +221,98 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
 
       {/* Unified All Leaves section below the calendar */}
       <div className="mt-6">
-        <h3 className="text-lg font-semibold mb-2">All Leaves</h3>
-        <div className="space-y-3">
-          {getAllLeaves().length === 0 && (
-            <div className="text-gray-500">No leaves found.</div>
-          )}
-          {getAllLeaves().map(leave => (
-            <div key={leave.id} className="p-3 border rounded bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-              <div>
-                <div><strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}</div>
-                {leave.category === 'multi-day' ? (
-                  <>
-                    <div><strong>From:</strong> {leave.from_date}</div>
-                    <div><strong>To:</strong> {leave.to_date}</div>
-                    <div><strong>Reason:</strong> {leave.reason}</div>
-                    <div><strong>Description:</strong> {leave.brief_description}</div>
-                  </>
-                ) : (
-                  <>
-                    <div><strong>Date:</strong> {leave.leave_date}</div>
-                    <div><strong>Leave Type:</strong> {leave.leave_type}</div>
-                    <div><strong>Reason:</strong> {leave.reason}</div>
-                  </>
-                )}
-                <div><strong>Status:</strong> {leave.status}</div>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => { setEditLeave(leave); setEditFormOpen(true); }}>Update</Button>
-                <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
-              </div>
+        <h3 className="text-lg font-semibold mb-2">My Leaves by Status</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Pending */}
+          <div>
+            <h4 className="font-semibold text-yellow-700 mb-2">Pending</h4>
+            <div className="space-y-3">
+              {getAllLeaves().filter(l => l.status === 'pending').length === 0 && <div className="text-gray-400">No pending leaves.</div>}
+              {getAllLeaves().filter(l => l.status === 'pending').map(leave => (
+                <div key={leave.id} className="p-3 border rounded bg-yellow-50 flex flex-col gap-1">
+                  <div><strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}</div>
+                  {leave.category === 'multi-day' ? (
+                    <>
+                      <div><strong>From:</strong> {leave.from_date}</div>
+                      <div><strong>To:</strong> {leave.to_date}</div>
+                      <div><strong>Reason:</strong> {leave.reason}</div>
+                      <div><strong>Description:</strong> {leave.brief_description}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong>Date:</strong> {leave.leave_date}</div>
+                      <div><strong>Leave Type:</strong> {leave.leave_type}</div>
+                      <div><strong>Reason:</strong> {leave.reason}</div>
+                    </>
+                  )}
+                  <div><strong>Status:</strong> {leave.status}</div>
+                  <div className="flex gap-2 mt-2">
+                    <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          {/* Approved */}
+          <div>
+            <h4 className="font-semibold text-green-700 mb-2">Approved</h4>
+            <div className="space-y-3">
+              {getAllLeaves().filter(l => l.status === 'approved').length === 0 && <div className="text-gray-400">No approved leaves.</div>}
+              {getAllLeaves().filter(l => l.status === 'approved').map(leave => (
+                <div key={leave.id} className="p-3 border rounded bg-green-50 flex flex-col gap-1">
+                  <div><strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}</div>
+                  {leave.category === 'multi-day' ? (
+                    <>
+                      <div><strong>From:</strong> {leave.from_date}</div>
+                      <div><strong>To:</strong> {leave.to_date}</div>
+                      <div><strong>Reason:</strong> {leave.reason}</div>
+                      <div><strong>Description:</strong> {leave.brief_description}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong>Date:</strong> {leave.leave_date}</div>
+                      <div><strong>Leave Type:</strong> {leave.leave_type}</div>
+                      <div><strong>Reason:</strong> {leave.reason}</div>
+                    </>
+                  )}
+                  <div><strong>Status:</strong> {leave.status}</div>
+                  <div className="flex gap-2 mt-2">
+                    <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Declined */}
+          <div>
+            <h4 className="font-semibold text-red-700 mb-2">Declined</h4>
+            <div className="space-y-3">
+              {getAllLeaves().filter(l => l.status === 'rejected').length === 0 && <div className="text-gray-400">No declined leaves.</div>}
+              {getAllLeaves().filter(l => l.status === 'rejected').map(leave => (
+                <div key={leave.id} className="p-3 border rounded bg-red-50 flex flex-col gap-1">
+                  <div><strong>Type:</strong> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}</div>
+                  {leave.category === 'multi-day' ? (
+                    <>
+                      <div><strong>From:</strong> {leave.from_date}</div>
+                      <div><strong>To:</strong> {leave.to_date}</div>
+                      <div><strong>Reason:</strong> {leave.reason}</div>
+                      <div><strong>Description:</strong> {leave.brief_description}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong>Date:</strong> {leave.leave_date}</div>
+                      <div><strong>Leave Type:</strong> {leave.leave_type}</div>
+                      <div><strong>Reason:</strong> {leave.reason}</div>
+                    </>
+                  )}
+                  <div><strong>Status:</strong> {leave.status}</div>
+                  <div className="flex gap-2 mt-2">
+                    <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

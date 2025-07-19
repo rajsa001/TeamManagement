@@ -21,6 +21,7 @@ import { Task } from '../../types';
 import { Project } from '../../types';
 import { authService } from '../../services/auth';
 import { useEffect } from 'react';
+import { format } from 'timeago.js';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -44,7 +45,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const { user } = useAuth();
-  const isSuperAdmin = user?.email === 'admin1@company.com';
+  const isSuperAdmin = user?.email === 'rathorerajpal18112003@gmail.com';
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
@@ -139,6 +140,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
       fetchBalances();
     }
   }, [leaves, activeTab, isSuperAdmin]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLeaves = async () => {
+      const { data } = await supabase
+        .from('leaves')
+        .select('*, user:members!user_id(*)');
+      if (isMounted && data) {
+        // Use the same structure as useLeaves
+        setLeaves(data);
+      }
+    };
+    fetchLeaves();
+    const interval = setInterval(fetchLeaves, 5000); // Poll every 5 seconds
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -243,6 +263,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
 
   const handleDeleteProject = async (id: string) => {
     await deleteProject(id);
+  };
+
+  // Add this function to toggle the open state for each section
+  const toggleSection = (sectionKey: keyof typeof openSections) => {
+    setOpenSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
   };
 
   // Helper to render section
@@ -383,13 +408,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
               <ul className="mt-3 w-full text-center text-gray-700 text-base">
                 {workingTodayCount === 0 ? <li>No one working today</li> : workingToday.map(m => <li key={m.id}>{m.name}</li>)}
               </ul>
-            )}
-          </div>
+              )}
+            </div>
           {/* On Leave card */}
           <div className="bg-white border border-gray-200 rounded-lg shadow p-6 flex flex-col items-center">
             <div className="text-2xl font-bold text-red-700 flex items-center gap-2">
               <UserPlus className="w-6 h-6 text-red-500" /> On Leave - {onLeaveCount}
-            </div>
+          </div>
             <button
               className="mt-3 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
               onClick={() => setShowLeave(v => !v)}
@@ -400,9 +425,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
               <ul className="mt-3 w-full text-center text-gray-700 text-base">
                 {onLeaveCount === 0 ? <li>No one on leave today</li> : onLeaveToday.map(m => <li key={m.id}>{m.name}</li>)}
               </ul>
-            )}
+              )}
+            </div>
           </div>
-        </div>
         {/* Section title for task overview */}
         <h2 className="text-xl font-semibold text-gray-800 mt-10 mb-2">Task Overview</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -482,7 +507,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     const pendingLeaves = leaves.filter(l => l.status === 'pending');
 
     // Super-admin check
-    const isSuperAdmin = user?.email === 'admin1@gmail.com';
+    const isSuperAdmin = user?.email === 'rathorerajpal18112003@gmail.com';
 
     // Handle balance edit
     const handleEditBalances = (memberId: string, balances: any) => {
@@ -537,12 +562,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           <h2 className="text-lg font-semibold text-gray-800 mb-2">Pending Leaves</h2>
           {pendingLeaves.length === 0 ? (
             <div className="text-gray-500">No pending leave requests.</div>
-          ) : (
-            <div className="grid gap-4">
+        ) : (
+          <div className="grid gap-4">
               {pendingLeaves.map(leave => (
                 <Card key={leave.id} className="flex flex-col md:flex-row justify-between items-start md:items-center border border-gray-200 bg-white">
                   <div className="flex-1 space-y-1">
                     <div className="font-semibold text-gray-900 text-base">{leave.user?.name || 'Unknown User'}</div>
+                    <div className="text-xs text-gray-400 mb-1">{leave.created_at ? format(leave.created_at) : ''}</div>
                     <div className="text-sm text-gray-700">
                       <span className="font-medium">Type:</span> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}
                       {leave.category === 'multi-day' ? (
@@ -566,10 +592,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                       `}>{leave.status}</span>
                     </div>
                   </div>
-                  <div className="flex flex-row md:flex-col gap-2 mt-4 md:mt-0 md:ml-6">
-                    <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Approve</Button>
-                    <Button variant="danger" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'rejected', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Decline</Button>
-                  </div>
+                    <div className="flex flex-row md:flex-col gap-2 mt-4 md:mt-0 md:ml-6">
+                      <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Approve</Button>
+                      <Button variant="danger" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'rejected', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Decline</Button>
+                    </div>
                 </Card>
               ))}
             </div>
@@ -652,8 +678,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                           ))
                         )}
                       </div>
-                    </div>
-                  )}
+          </div>
+        )}
                 </Card>
               );
             })}
@@ -996,7 +1022,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   // Add admin management tab for admin
   if (activeTab === 'admin-management') {
     // Only Super-Admin can see this section
-    if (!user || user.name !== 'Super-Admin' || user.email !== 'admin1@company.com') {
+    if (!user || user.name !== 'Super-Admin' || user.email !== 'rathorerajpal18112003@gmail.com') {
       return (
         <div className="p-8 text-center text-gray-500">You do not have access to this section.</div>
       );

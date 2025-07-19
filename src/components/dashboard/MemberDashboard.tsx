@@ -16,6 +16,7 @@ import ProjectCard from './ProjectCard';
 import { useProjects } from '../../hooks/useProjects';
 import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
+import { useEffect } from 'react';
 
 interface MemberDashboardProps {
   activeTab: string;
@@ -59,6 +60,29 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [leaveBalance, setLeaveBalance] = useState<{ sick_leaves: number; casual_leaves: number; paid_leaves: number } | null>(null);
+  useEffect(() => {
+    if (activeTab !== 'leaves' || !user) return;
+    const fetchBalance = async () => {
+      const year = new Date().getFullYear();
+      const { data, error } = await supabase
+        .from('member_leave_balances')
+        .select('*')
+        .eq('member_id', user.id)
+        .eq('year', year)
+        .single();
+      if (!error && data) {
+        setLeaveBalance({
+          sick_leaves: data.sick_leaves,
+          casual_leaves: data.casual_leaves,
+          paid_leaves: data.paid_leaves,
+        });
+      } else {
+        setLeaveBalance(null);
+      }
+    };
+    fetchBalance();
+  }, [activeTab, user]);
 
   // Helper to get/set dismissed notifications in localStorage
   const getDismissedNotifications = () => {
@@ -104,7 +128,10 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         .order('created_at', { ascending: false });
       if (!error && data) {
         const dismissed = getDismissedNotifications();
-        setNotifications(data.filter(n => !dismissed.includes(n.id)));
+        const filtered = data.filter(n => !dismissed.includes(n.id));
+        setNotifications(filtered);
+        // Dispatch event for notification dot
+        window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: filtered.some(n => !n.is_read) } }));
       }
       setNotificationsLoading(false);
     };
@@ -126,7 +153,11 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
           if (payload.new) {
             const dismissed = getDismissedNotifications();
             if (!dismissed.includes(payload.new.id)) {
-              setNotifications((prev) => [payload.new, ...prev]);
+              setNotifications((prev) => {
+                const updated = [payload.new, ...prev];
+                window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: updated.some(n => !n.is_read) } }));
+                return updated;
+              });
             }
           } else {
             // Fallback: refetch notifications if payload is missing
@@ -241,11 +272,26 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     }, 1000);
   };
 
+  // Add greeting logic
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'good morning';
+    if (hour < 18) return 'good afternoon';
+    return 'good evening';
+  };
+  const memberName = user?.name || 'Member';
+
   if (activeTab === 'dashboard') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">My Dashboard</h1>
+      <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
+        {/* Personalized greeting at the top */}
+        <div className="flex items-center justify-between pt-4 pb-2">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <span>
+              Hey <span className="text-blue-600 font-extrabold animate-pulse">{memberName}</span>, {getGreeting()} 
+            </span>
+            <span className="animate-waving-hand text-3xl ml-1" role="img" aria-label="wave">👋</span>
+          </h1>
         </div>
         
         <DashboardStats tasks={tasks} leaves={leaves} />
@@ -372,13 +418,29 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   }
 
   if (activeTab === 'leaves') {
-    const today = new Date();
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">My Leaves</h1>
         </div>
-
+        {/* Remaining Leaves Section */}
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Remaining Leaves</h2>
+          <div className="flex gap-4">
+            <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <div className="text-xs text-gray-500 mb-1">Sick</div>
+              <div className="text-2xl font-bold text-blue-700">{leaveBalance ? leaveBalance.sick_leaves : '--'}</div>
+            </div>
+            <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+              <div className="text-xs text-gray-500 mb-1">Casual</div>
+              <div className="text-2xl font-bold text-yellow-700">{leaveBalance ? leaveBalance.casual_leaves : '--'}</div>
+            </div>
+            <div className="flex-1 bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+              <div className="text-xs text-gray-500 mb-1">Paid</div>
+              <div className="text-2xl font-bold text-green-700">{leaveBalance ? leaveBalance.paid_leaves : '--'}</div>
+            </div>
+          </div>
+        </div>
         {leavesError && (
           <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">
             {leavesError}
