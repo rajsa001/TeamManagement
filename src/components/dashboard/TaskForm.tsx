@@ -22,6 +22,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
     user_id: user?.id || '',
     project_id: initialProjectId || '',
     status: 'pending' as Task['status'],
+    progress: 0,
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -68,7 +69,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
       created_by: formData.user_id,
     };
     onSubmit(baseTask);
-    setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '', status: 'pending' });
+    setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '', status: 'pending', progress: 0 });
     onClose();
   };
 
@@ -141,8 +142,6 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
             <option value="pending">Pending</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
-            <option value="blocked">Blocked</option>
-            <option value="cancelled">Cancelled</option>
           </select>
         </div>
 

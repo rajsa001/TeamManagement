@@ -229,8 +229,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   // Real-time notifications for admin (mirroring member dashboard)
   useEffect(() => {
     fetchAdminNotifications();
-    const interval = setInterval(fetchAdminNotifications, 10000); // Poll every 10s
-    if (!user || user.role !== 'admin') return () => clearInterval(interval);
+    // Remove polling since we have real-time subscription
+    if (!user || user.role !== 'admin') return;
+    
+    console.log('[DEBUG] Setting up notifications channel for admin:', user.id);
+    
+    // Create a Set to track shown notifications and prevent duplicates
+    const shownNotifications = new Set();
+    
     const channel = supabase.channel('notifications-realtime-admin')
       .on(
         'postgres_changes',
@@ -241,26 +247,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('Realtime notification payload:', payload);
-          fetchAdminNotifications();
-          // Show toast
-          if (payload.new) {
+          console.log('[DEBUG] Admin received realtime notification:', payload);
+          
+          // Check if we've already shown this notification
+          if (payload.new && !shownNotifications.has(payload.new.id)) {
+            shownNotifications.add(payload.new.id);
+            
             let dateTime = '';
             if (payload.new.created_at) {
               const d = new Date(payload.new.created_at);
               dateTime = `${d.getDate().toString().padStart(2, '0')} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
             }
+            
             toast(payload.new.title, {
               description: `${payload.new.message}${dateTime ? `\n${dateTime}` : ''}`,
               style: { background: '#2563eb', color: 'white' },
               duration: 4500,
             });
+            
+            // Update notifications list immediately
+            fetchAdminNotifications();
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[DEBUG] Notifications channel status:', status);
+      });
+    
     return () => {
-      clearInterval(interval);
+      console.log('[DEBUG] Cleaning up notifications channel for admin');
       supabase.removeChannel(channel);
     };
   }, [user]);

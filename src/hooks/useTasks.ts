@@ -12,6 +12,7 @@ export const useTasks = () => {
 
   // Refetch function
   const refetchTasks = async () => {
+    console.log('[DEBUG] refetchTasks called');
     setLoading(true);
     let query = supabase
       .from('tasks')
@@ -53,11 +54,14 @@ export const useTasks = () => {
     }
     if (data) {
       await refetchTasks();
-      toast('📝 New Task Added', {
-        description: `A new task has been assigned to you: ${data.task_name}`,
-        style: { background: '#2563eb', color: 'white' },
-        duration: 4500,
-      });
+      // Only show toast for member, not for admin self
+      if (user?.role !== 'admin') {
+        toast('📝 New Task Added', {
+          description: `A new task has been assigned to you: ${data.task_name}`,
+          style: { background: '#2563eb', color: 'white' },
+          duration: 4500,
+        });
+      }
       // Send webhook to n8n automation (legacy)
       try {
         await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
@@ -89,7 +93,7 @@ export const useTasks = () => {
           });
           const { error: notifError1 } = await supabase.from('notifications').insert([
             {
-              user_id: data.user_id, // <-- add user_id for member
+              user_id: data.user_id,
               from_id: user.id,
               to_id: data.user_id,
               title: '📝 New Task Assigned',
@@ -114,7 +118,7 @@ export const useTasks = () => {
           });
           const { error: notifError2 } = await supabase.from('notifications').insert([
             {
-              user_id: user.id, // <-- add user_id for admin (self)
+              user_id: user.id,
               from_id: user.id,
               to_id: user.id,
               title: '📝 You assigned a new task',
@@ -130,21 +134,37 @@ export const useTasks = () => {
           } else {
             console.log('[NOTIF] Notification for admin (self) inserted successfully');
           }
-        } else if (user?.role === 'member' && user?.id && user?.name) {
-          // Member adds a task: notify all admins and self
+        } else if (user?.role === 'member') {
+          // Member adds a task: notify all admins
+          console.log('[NOTIF] Member adding task, fetching admins to notify');
           const { data: admins } = await supabase
             .from('admins')
             .select('id, name')
-            .neq('email', '');
+            .eq('is_active', true);
+
+          // Get project name for the notification
+          let projectName = '';
+          if (data.project_id) {
+            const { data: project } = await supabase
+              .from('projects')
+              .select('name')
+              .eq('id', data.project_id)
+              .single();
+            if (project) {
+              projectName = project.name;
+            }
+          }
+
           if (admins && admins.length > 0) {
+            console.log('[NOTIF] Found admins to notify:', admins.length);
             await Promise.all(admins.map((admin: any) =>
               supabase.from('notifications').insert([
                 {
-                  user_id: admin.id, // <-- add user_id for admin
+                  user_id: admin.id,
                   from_id: user.id,
                   to_id: admin.id,
-                  title: '📝 Task Added',
-                  message: `${user.name || 'A member'} added a new task: ${data.task_name}`,
+                  title: '📝 New Task Added by Member',
+                  message: `${user.name || 'A member'} added a new task${projectName ? ` in project "${projectName}"` : ''}: ${data.task_name}`,
                   type: 'task_added',
                   related_id: data.id,
                   related_type: 'task',
@@ -152,21 +172,8 @@ export const useTasks = () => {
                 },
               ])
             ));
+            console.log('[NOTIF] Notifications sent to all admins');
           }
-          // Notify the member (self)
-          await supabase.from('notifications').insert([
-            {
-              user_id: user.id, // <-- add user_id for member (self)
-              from_id: user.id,
-              to_id: user.id,
-              title: '📝 You added a new task',
-              message: `You added a new task: ${data.task_name}`,
-              type: 'task_added',
-              related_id: data.id,
-              related_type: 'task',
-              created_at: new Date().toISOString(),
-            },
-          ]);
         }
       } catch (notifError) {
         console.error('Failed to send notification for task added:', notifError);
@@ -403,14 +410,93 @@ export const useTasks = () => {
       }
       // --- END NEW ---
     }
+    if (updates.status && prevStatus && updates.status !== prevStatus) {
+      let emoji = '';
+      let statusText = '';
+      if (updates.status === 'completed') {
+        emoji = '🎉';
+        statusText = 'completed';
+      } else if (updates.status === 'in_progress') {
+        emoji = '⏳';
+        statusText = 'in progress';
+      } else if (updates.status === 'pending') {
+        emoji = '⏳';
+        statusText = 'pending';
+      }
+
+      // Get project name for context
+      let projectName = '';
+      if (data.project_id) {
+        const { data: project } = await supabase
+          .from('projects')
+          .select('name')
+          .eq('id', data.project_id)
+          .single();
+        if (project) {
+          projectName = project.name;
+        }
+      }
+
+      // Only send one notification based on who made the update
+      try {
+        if (user?.role === 'admin') {
+          // Admin updates a task: notify only the member
+          if (data.user_id) {
+            await supabase.from('notifications').insert([
+              {
+                user_id: data.user_id,
+                from_id: user.id,
+                to_id: data.user_id,
+                title: `${emoji} Task Status Updated by Admin`,
+                message: `Admin ${user.name} updated your task${projectName ? ` in project "${projectName}"` : ''}: "${data.task_name}" to ${statusText}`,
+                type: 'task_status_updated',
+                related_id: data.id,
+                related_type: 'task',
+                created_at: new Date().toISOString(),
+              },
+            ]);
+          }
+        } else if (user?.role === 'member') {
+          // Member updates a task: notify only the admins
+          const { data: admins } = await supabase
+            .from('admins')
+            .select('id, name')
+            .eq('is_active', true);
+
+          if (admins && admins.length > 0) {
+            await Promise.all(admins.map((admin: any) =>
+              supabase.from('notifications').insert([
+                {
+                  user_id: admin.id,
+                  from_id: user.id,
+                  to_id: admin.id,
+                  title: `${emoji} Task Status Updated by Member`,
+                  message: `${user.name || 'A member'} updated task${projectName ? ` in project "${projectName}"` : ''}: "${data.task_name}" to ${statusText}`,
+                  type: 'task_status_updated',
+                  related_id: data.id,
+                  related_type: 'task',
+                  created_at: new Date().toISOString(),
+                },
+              ])
+            ));
+          }
+        }
+      } catch (notifError) {
+        console.error('Failed to send notification for status update:', notifError);
+      }
+    }
+
+    // Remove this section as we're now handling notifications above
     // --- NEW: Notify all admins and the member (from/to logic) ---
     try {
-      if (user?.role !== 'admin') {
-        // Member updates a task: notify all admins and self
+      // Handle any other non-status updates if needed
+      if (!updates.status && user?.role === 'member') {
+        // Member updates other task details: notify admins
         const { data: admins } = await supabase
           .from('admins')
           .select('id, name')
-          .neq('email', '');
+          .eq('is_active', true);
+
         if (admins && admins.length > 0) {
           await Promise.all(admins.map((admin: any) =>
             supabase.from('notifications').insert([
@@ -419,7 +505,7 @@ export const useTasks = () => {
                 from_id: user?.id,
                 to_id: admin.id,
                 title: '📝 Task Updated',
-                message: `${user?.name || 'A member'} updated a task: ${data.task_name}`,
+                message: `${user?.name || 'A member'} updated task: ${data.task_name}`,
                 type: 'task_updated',
                 related_id: data.id,
                 related_type: 'task',
@@ -428,57 +514,9 @@ export const useTasks = () => {
             ])
           ));
         }
-        // Notify the member (self)
-        if (user?.id) {
-          await supabase.from('notifications').insert([
-            {
-              user_id: user.id,
-              from_id: user.id,
-              to_id: user.id,
-              title: '📝 You updated a task',
-              message: `You updated a member's task: ${data.task_name}`,
-              type: 'task_updated',
-              related_id: data.id,
-              related_type: 'task',
-              created_at: new Date().toISOString(),
-            },
-          ]);
-        }
-      } else {
-        // Admin updates a task: notify the member and self
-        if (data.user_id) {
-          // Notify the member
-          await supabase.from('notifications').insert([
-            {
-              user_id: data.user_id,
-              from_id: user.id,
-              to_id: data.user_id,
-              title: '📝 Task Updated by Admin',
-              message: `Admin ${user.name} updated your task: ${data.task_name}`,
-              type: 'task_updated_by_admin',
-              related_id: data.id,
-              related_type: 'task',
-              created_at: new Date().toISOString(),
-            },
-          ]);
-        }
-        // Notify the admin (self)
-        await supabase.from('notifications').insert([
-          {
-            user_id: user.id,
-            from_id: user.id,
-            to_id: user.id,
-            title: '📝 You updated a member task',
-            message: `You updated a member's task: ${data.task_name}`,
-            type: 'task_updated',
-            related_id: data.id,
-            related_type: 'task',
-            created_at: new Date().toISOString(),
-          },
-        ]);
       }
     } catch (notifError) {
-      console.error('Failed to send notification to admins/member:', notifError);
+      console.error('Failed to send notification for task update:', notifError);
     }
     return data;
   };
