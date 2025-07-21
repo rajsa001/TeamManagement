@@ -444,7 +444,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
         ) : (
           <>
             <div className="h-80 flex">
-              <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+            <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
             </div>
             {tasks.length > 1 && !openSections[sectionKey] && (
               <button
@@ -658,13 +658,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredTasks.map(task => (
               <div key={task.id} className="flex h-80">
-                <TaskCard
-                  task={task}
-                  onDelete={deleteTask}
-                  onStatusChange={handleStatusChange}
-                  showUser={true}
-                  onUpdate={handleTaskUpdate}
-                />
+              <TaskCard
+                task={task}
+                onDelete={deleteTask}
+                onStatusChange={handleStatusChange}
+                showUser={true}
+                onUpdate={handleTaskUpdate}
+              />
               </div>
             ))}
           </div>

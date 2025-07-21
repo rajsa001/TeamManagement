@@ -205,8 +205,9 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
           table: 'tasks',
         },
         (payload) => {
-          // Only refetch if the changed task is relevant to this member
-          const affected = payload.new || payload.old;
+          console.log('Realtime event:', payload);
+          // For DELETE, use payload.old; for INSERT/UPDATE, use payload.new
+          const affected = payload.eventType === 'DELETE' ? payload.old : payload.new;
           if (affected && affected.user_id === user.id) {
             refetchTasks();
           }
@@ -216,7 +217,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, refetchTasks]);
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -430,39 +431,39 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
           {renderTaskSection('Due Today', Calendar, dueTodayTasks, 'dueToday', 'today')}
           {renderTaskSection('Upcoming', Clock, upcomingTasks, 'upcoming', 'upcoming')}
           {renderTaskSection('Blocked', AlertCircle, blockedTasks, 'blocked', 'blocked')}
-        </div>
+            </div>
         {/* Upcoming Leaves section remains as before */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Leaves</h2>
-          <div className="space-y-2">
-            {leaves
-              .filter(leave => {
-                // Only show leaves that are today or in the future (for single-day), or multi-day leaves that end today or later
-                const today = new Date();
-                today.setHours(0,0,0,0);
-                if (leave.category === 'multi-day' && leave.to_date) {
-                  return new Date(leave.to_date) >= today;
-                } else if (leave.leave_date) {
-                  return new Date(leave.leave_date) >= today;
-                }
-                return false;
-              })
-              .sort((a, b) => {
-                // Sort by start date
-                const aDate = a.category === 'multi-day' ? new Date(a.from_date ?? '') : new Date(a.leave_date ?? '');
-                const bDate = b.category === 'multi-day' ? new Date(b.from_date ?? '') : new Date(b.leave_date ?? '');
-                return aDate.getTime() - bDate.getTime();
-              })
-              .slice(0, 3)
-              .map(leave => (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Leaves</h2>
+            <div className="space-y-2">
+              {leaves
+                .filter(leave => {
+                  // Only show leaves that are today or in the future (for single-day), or multi-day leaves that end today or later
+                  const today = new Date();
+                  today.setHours(0,0,0,0);
+                  if (leave.category === 'multi-day' && leave.to_date) {
+                    return new Date(leave.to_date) >= today;
+                  } else if (leave.leave_date) {
+                    return new Date(leave.leave_date) >= today;
+                  }
+                  return false;
+                })
+                .sort((a, b) => {
+                  // Sort by start date
+                  const aDate = a.category === 'multi-day' ? new Date(a.from_date ?? '') : new Date(a.leave_date ?? '');
+                  const bDate = b.category === 'multi-day' ? new Date(b.from_date ?? '') : new Date(b.leave_date ?? '');
+                  return aDate.getTime() - bDate.getTime();
+                })
+                .slice(0, 3)
+                .map(leave => (
                 <div key={leave.id} className="border rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50">
                   <div>
                     <span className="font-semibold">{leave.leave_type}</span> - {leave.category === 'multi-day' ? `${leave.from_date} to ${leave.to_date}` : leave.leave_date}
                     <span className="ml-2 text-xs">({leave.status})</span>
-                  </div>
-                  <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
-                </div>
-              ))}
+                      </div>
+                      <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
+                    </div>
+                ))}
           </div>
         </div>
       </div>
@@ -495,12 +496,12 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
           <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {filteredTasks.map(task => (
               <div key={task.id} className="flex h-80">
-                <TaskCard
-                  task={task}
-                  onDelete={deleteTask}
-                  onStatusChange={handleStatusChange}
-                  onUpdate={updateTask}
-                />
+              <TaskCard
+                task={task}
+                onDelete={deleteTask}
+                onStatusChange={handleStatusChange}
+                onUpdate={updateTask}
+              />
               </div>
             ))}
           </div>
