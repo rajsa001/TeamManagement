@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, User, Bell } from 'lucide-react';
+import { Plus, User, Bell, CheckCircle2, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,7 +24,7 @@ interface MemberDashboardProps {
 }
 
 const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
-  const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, filterTasks } = useTasks();
+  const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
   const { leaves, loading: leavesLoading, error: leavesError, addLeave, updateLeave, deleteLeave } = useLeaves();
   const { user } = useAuth();
   const { projects, loading: projectsLoading, error: projectsError } = useProjects();
@@ -193,8 +193,30 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     // --- END real-time ---
   }, [user]);
 
-  // Remove the real-time subscription for tasks (member sees all changes to their tasks)
-  // (Revert: delete the useEffect with channel 'tasks-realtime-member')
+  // Real-time subscription for tasks (member sees all changes to their tasks, robust to admin actions)
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel('tasks-realtime-member')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        (payload) => {
+          // Only refetch if the changed task is relevant to this member
+          const affected = payload.new || payload.old;
+          if (affected && affected.user_id === user.id) {
+            refetchTasks();
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -303,7 +325,92 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   };
   const memberName = user?.name || 'Member';
 
+  // Place at the top level, outside any if block:
+  const [openSections, setOpenSections] = useState({
+    recentlyCompleted: false,
+    dueToday: false,
+    upcoming: false,
+    blocked: false,
+  });
+  const toggleSection = (sectionKey) => {
+    setOpenSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
+  };
+  const renderTaskSection = (title, Icon, tasks, sectionKey, sectionName) => (
+    <div>
+      <div className="flex items-center gap-2 mb-4 group">
+        <Icon className="w-6 h-6 text-blue-600" />
+        <h2 className="text-xl font-extrabold text-gray-900 transition-transform duration-300 group-hover:scale-105 truncate whitespace-nowrap">
+          {title}
+        </h2>
+      </div>
+      <div className="space-y-4">
+        {tasks.length === 0 ? (
+          <div className="text-gray-500">No {title.toLowerCase()}.</div>
+        ) : (
+          <>
+            <div className="h-80 flex">
+              <TaskCard key={tasks[0].id} task={tasks[0]} section={sectionName} />
+            </div>
+            {tasks.length > 1 && !openSections[sectionKey] && (
+              <button
+                onClick={() => toggleSection(sectionKey)}
+                className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                Show More
+              </button>
+            )}
+            {tasks.length > 1 && openSections[sectionKey] && (
+              <>
+                <div className="space-y-4">
+                  {tasks.slice(1).map(task => (
+                    <div key={task.id} className="h-80 flex">
+                      <TaskCard task={task} section={sectionName} />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => toggleSection(sectionKey)}
+                  className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  Show Less
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   if (activeTab === 'dashboard') {
+    // Section logic for member dashboard (like admin)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isSameDay = (d1, d2) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+    // Recently Completed: completed within last 3 days
+    const recentlyCompletedTasks = tasks.filter(task => {
+      if (task.status !== 'completed' || !task.updated_at) return false;
+      const updated = new Date(task.updated_at);
+      const diff = (today.getTime() - updated.setHours(0,0,0,0)) / (1000 * 60 * 60 * 24);
+      return diff <= 3 && diff >= 0;
+    });
+    // Due Today: due date is today and not completed
+    const dueTodayTasks = tasks.filter(task => {
+      const due = new Date(task.due_date);
+      return isSameDay(due, today) && task.status !== 'completed';
+    });
+    // Upcoming: due date is within next 3 days (excluding today)
+    const upcomingTasks = tasks.filter(task => {
+      const due = new Date(task.due_date);
+      const diff = (due.setHours(0,0,0,0) - today.getTime()) / (1000 * 60 * 60 * 24);
+      return diff > 0 && diff <= 3;
+    });
+    // Blocked: overdue and not completed, or status is 'blocked'
+    const blockedTasks = tasks.filter(task => {
+      const due = new Date(task.due_date);
+      return (task.status !== 'completed' && due < today) || task.status === 'blocked';
+    });
+    // Icons
     return (
       <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
         {/* Personalized greeting at the top */}
@@ -315,79 +422,47 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             <span className="animate-waving-hand text-3xl ml-1" role="img" aria-label="wave">👋</span>
           </h1>
         </div>
-        
         <DashboardStats tasks={tasks} leaves={leaves} />
-        
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Tasks</h2>
-            <div className="space-y-4">
-              {tasks.slice(0, 3).map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onDelete={deleteTask}
-                  onStatusChange={handleStatusChange}
-                  // Do not pass onUpdate here to hide edit button
-                />
+        {/* Task sections grid */}
+        <h2 className="text-xl font-semibold text-gray-800 mt-10 mb-2">Task Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {renderTaskSection('Recently Completed', CheckCircle2, recentlyCompletedTasks, 'recentlyCompleted', 'completed')}
+          {renderTaskSection('Due Today', Calendar, dueTodayTasks, 'dueToday', 'today')}
+          {renderTaskSection('Upcoming', Clock, upcomingTasks, 'upcoming', 'upcoming')}
+          {renderTaskSection('Blocked', AlertCircle, blockedTasks, 'blocked', 'blocked')}
+        </div>
+        {/* Upcoming Leaves section remains as before */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Leaves</h2>
+          <div className="space-y-2">
+            {leaves
+              .filter(leave => {
+                // Only show leaves that are today or in the future (for single-day), or multi-day leaves that end today or later
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                if (leave.category === 'multi-day' && leave.to_date) {
+                  return new Date(leave.to_date) >= today;
+                } else if (leave.leave_date) {
+                  return new Date(leave.leave_date) >= today;
+                }
+                return false;
+              })
+              .sort((a, b) => {
+                // Sort by start date
+                const aDate = a.category === 'multi-day' ? new Date(a.from_date ?? '') : new Date(a.leave_date ?? '');
+                const bDate = b.category === 'multi-day' ? new Date(b.from_date ?? '') : new Date(b.leave_date ?? '');
+                return aDate.getTime() - bDate.getTime();
+              })
+              .slice(0, 3)
+              .map(leave => (
+                <div key={leave.id} className="border rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50">
+                  <div>
+                    <span className="font-semibold">{leave.leave_type}</span> - {leave.category === 'multi-day' ? `${leave.from_date} to ${leave.to_date}` : leave.leave_date}
+                    <span className="ml-2 text-xs">({leave.status})</span>
+                  </div>
+                  <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
+                </div>
               ))}
-            </div>
-          </div>
-          
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Leaves</h2>
-            <div className="space-y-2">
-              {leaves
-                .filter(leave => {
-                  // Only show leaves that are today or in the future (for single-day), or multi-day leaves that end today or later
-                  const today = new Date();
-                  today.setHours(0,0,0,0);
-                  if (leave.category === 'multi-day' && leave.to_date) {
-                    return new Date(leave.to_date) >= today;
-                  } else if (leave.leave_date) {
-                    return new Date(leave.leave_date) >= today;
-                  }
-                  return false;
-                })
-                .sort((a, b) => {
-                  // Sort by start date
-                  const aDate = a.category === 'multi-day' ? new Date(a.from_date ?? '') : new Date(a.leave_date ?? '');
-                  const bDate = b.category === 'multi-day' ? new Date(b.from_date ?? '') : new Date(b.leave_date ?? '');
-                  return aDate.getTime() - bDate.getTime();
-                })
-                .slice(0, 3)
-                .map(leave => (
-                  <Card key={leave.id} className="bg-white border border-gray-200">
-                    <div className="space-y-1">
-                      <div className="font-semibold text-gray-900 text-base">{leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'} Leave</div>
-                      <div className="text-sm text-gray-700">
-                        {leave.category === 'multi-day' ? (
-                          <>
-                            <span className="font-medium">From:</span> {leave.from_date} <span className="mx-2">|</span> <span className="font-medium">To:</span> {leave.to_date}
-                          </>
-                        ) : (
-                          <>
-                            <span className="font-medium">Date:</span> {leave.leave_date}
-                          </>
-                        )}
-                        <span className="mx-2">|</span><span className="font-medium">Leave Type:</span> {leave.leave_type}
-                      </div>
-                      <div className="text-xs text-gray-500">Reason: {leave.reason}</div>
-                      {leave.category === 'multi-day' && (
-                        <div className="text-xs text-gray-500">Description: {leave.brief_description}</div>
-                      )}
-                      <div className="text-xs flex items-center gap-2">
-                        <span className="font-medium">Status:</span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold 
-                          ${leave.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : ''}
-                          ${leave.status === 'approved' ? 'bg-green-100 text-green-800' : ''}
-                          ${leave.status === 'rejected' ? 'bg-red-100 text-red-800' : ''}
-                        `}>{leave.status}</span>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-            </div>
           </div>
         </div>
       </div>
@@ -417,15 +492,16 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {filteredTasks.map(task => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onDelete={deleteTask}
-                onStatusChange={handleStatusChange}
-                onUpdate={updateTask}
-              />
+              <div key={task.id} className="flex h-80">
+                <TaskCard
+                  task={task}
+                  onDelete={deleteTask}
+                  onStatusChange={handleStatusChange}
+                  onUpdate={updateTask}
+                />
+              </div>
             ))}
           </div>
         )}

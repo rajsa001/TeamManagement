@@ -115,6 +115,60 @@ export const useLeaves = () => {
       } catch (webhookError) {
         console.error('Failed to send leave added webhook:', webhookError);
       }
+
+      // --- NEW: Notify all admins and the member (from/to logic) ---
+      try {
+        const { data: admins } = await supabase
+          .from('admins')
+          .select('id, name')
+          .neq('email', '');
+        // Notify all admins (to_id = admin, from_id = member)
+        if (admins && admins.length > 0 && user?.id) {
+          await Promise.all(admins.map((admin: any) =>
+            supabase.from('notifications').insert([
+              {
+                from_id: user.id,
+                to_id: admin.id,
+                title: '📝 Leave Request',
+                message: `${user?.name || 'A member'} has requested leave: ${data.leave_type} (${data.category === 'multi-day' ? `${data.from_date} to ${data.to_date}` : data.leave_date})`,
+                type: 'leave_requested',
+                related_id: data.id,
+                related_type: 'leave',
+                created_at: new Date().toISOString(),
+                is_read: false,
+              },
+            ])
+          ));
+        }
+        // Notify the member (self-notification)
+        if (user?.id) {
+          await supabase.from('notifications').insert([
+            {
+              from_id: user.id,
+              to_id: user.id,
+              title: '📝 You requested leave',
+              message: `You requested leave: ${data.leave_type} (${data.category === 'multi-day' ? `${data.from_date} to ${data.to_date}` : data.leave_date})`,
+              type: 'leave_requested',
+              related_id: data.id,
+              related_type: 'leave',
+              created_at: new Date().toISOString(),
+              is_read: false,
+            },
+          ]);
+        }
+        // Show toast notifications
+        // @ts-ignore
+        if (window && window.sonner) {
+          window.sonner.toast('📝 Leave Requested', {
+            description: `Your leave request has been submitted!`,
+            style: { background: '#2563eb', color: 'white' },
+            duration: 4500,
+          });
+        }
+      } catch (notifError) {
+        console.error('Failed to send notification to admin/member (member leave request):', notifError);
+      }
+      // --- END NEW ---
       return true;
     }
     setError('Unknown error adding leave');

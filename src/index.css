@@ -17,3 +17,42 @@
   animation: wave 1.5s infinite;
   transform-origin: 70% 70%;
 }
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Optional: Ripple effect for buttons */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ripple:after {
+  content: '';
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: rgba(0,0,0,0.08);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.ripple:active:after {
+  opacity: 1;
+  transition: 0s;
+}

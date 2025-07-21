@@ -14,6 +14,8 @@ import ProjectTasksPage from './components/dashboard/ProjectTasksPage';
 import Footer from './components/layout/Footer';
 import { supabase } from './lib/supabase';
 import NotificationsPage from './components/dashboard/NotificationsPage';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const getRemovedFlag = (user) => user ? sessionStorage.getItem(`notifications_removed_${user.id}`) === '1' : false;
 
@@ -130,6 +132,7 @@ const App: React.FC = () => {
           <Route path="*" element={<AppContent />} />
         </Routes>
       </BrowserRouter>
+      <ToastContainer position="top-right" autoClose={4500} />
     </AuthProvider>
   );
 };

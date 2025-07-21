@@ -39,6 +39,30 @@ const TaskCard: React.FC<TaskCardProps> = ({
     description: task.description,
     status: task.status as Task['status'],
   });
+  // Local state for progress input
+  const [progressInput, setProgressInput] = useState(task.progress);
+  React.useEffect(() => { setProgressInput(task.progress); }, [task.progress]);
+  // Overdue warning popover state
+  const [showOverdue, setShowOverdue] = useState(false);
+
+  // Handle progress input change
+  const handleProgressInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = Number(e.target.value);
+    if (isNaN(val)) val = 0;
+    val = Math.max(0, Math.min(100, val));
+    setProgressInput(val);
+  };
+  // Commit progress on blur or Enter
+  const commitProgress = () => {
+    if (progressInput !== task.progress && onUpdate) {
+      onUpdate(task.id, { progress: progressInput });
+    }
+  };
+  const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  };
 
   const getStatusVariant = (status: Task['status']) => {
     switch (status) {
@@ -75,44 +99,81 @@ const TaskCard: React.FC<TaskCardProps> = ({
     setIsEditOpen(false);
   };
 
-  // Section-based border gradient
+  // Section-based border gradient and accent color
   let borderClass = '';
-  switch (section) {
+  let accentColor = '';
+  switch (section || task.status) {
     case 'completed':
       borderClass = 'border-2 border-green-400 bg-gradient-to-br from-green-50 to-green-100';
+      accentColor = 'border-green-500';
       break;
     case 'today':
       borderClass = 'border-2 border-orange-400 bg-gradient-to-br from-orange-50 to-orange-100';
+      accentColor = 'border-orange-500';
       break;
     case 'upcoming':
       borderClass = 'border-2 border-blue-400 bg-gradient-to-br from-blue-50 to-blue-100';
+      accentColor = 'border-blue-500';
       break;
     case 'blocked':
       borderClass = 'border-2 border-red-400 bg-gradient-to-br from-red-50 to-red-100';
+      accentColor = 'border-red-500';
+      break;
+    case 'in_progress':
+      borderClass = 'border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-yellow-100';
+      accentColor = 'border-yellow-500';
+      break;
+    case 'pending':
+      borderClass = 'border-2 border-blue-400 bg-gradient-to-br from-blue-50 to-blue-100';
+      accentColor = 'border-blue-500';
+      break;
+    case 'not_started':
+      accentColor = 'border-gray-400';
       break;
     default:
       borderClass = '';
+      accentColor = '';
   }
 
   return (
-    <Card className={`${borderClass} ${isOverdue && !section ? 'border-red-200 bg-red-50' : ''}`} hover>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 mb-1">{task.task_name}</h3>
-          <p className="text-sm text-gray-600">{task.description}</p>
+    <Card
+      className={`flex flex-col h-full w-full min-h-0 min-w-0 overflow-hidden ${borderClass} ${isOverdue && !section ? 'border-red-200 bg-red-50' : ''} group transition-all duration-200`}
+      hover
+      animated
+      accentColor={accentColor}
+      padding="md"
+    >
+      <div className="flex items-start justify-between mb-4 relative">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-lg text-gray-900 mb-1 group-hover:text-blue-700 transition-colors duration-200 truncate">{task.task_name}</h3>
+          <p className="text-sm text-gray-600 mb-1 line-clamp-2 break-words">{task.description}</p>
           {task.project && (
-            <div className="text-xs text-blue-700 mt-1">Project: {task.project.name}</div>
+            <div className="text-xs text-blue-700 mt-1 truncate">Project: {task.project.name}</div>
           )}
         </div>
-        <div className="flex flex-col items-end space-y-1">
+        <div className="flex flex-col items-end space-y-1 flex-shrink-0">
           {(user?.role === 'admin' || task.user_id === user?.id) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={Trash2}
-              onClick={() => onDelete(task.id)}
-              className="text-red-500 hover:text-red-700"
-            />
+            <div className="flex items-center gap-1">
+              {/* Overdue warning icon (now next to delete button) */}
+              {isOverdue && section !== 'today' && (
+                <button
+                  type="button"
+                  className="p-1 rounded-full bg-red-100 hover:bg-red-200 text-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
+                  onClick={() => setShowOverdue(v => !v)}
+                  title="Show overdue warning"
+                  tabIndex={0}
+                >
+                  <AlertCircle className="w-5 h-5" />
+                </button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Trash2}
+                onClick={() => onDelete(task.id)}
+                className="text-red-500 hover:text-red-700 focus:ring-2 focus:ring-red-200 rounded-full"
+              />
+            </div>
           )}
           {(user?.role === 'admin' || task.user_id === user?.id) && onUpdate && (
             <Button
@@ -120,13 +181,22 @@ const TaskCard: React.FC<TaskCardProps> = ({
               size="sm"
               icon={Pencil}
               onClick={() => setIsEditOpen(true)}
-              className="text-blue-500 hover:text-blue-700"
+              className="text-blue-500 hover:text-blue-700 focus:ring-2 focus:ring-blue-200 rounded-full"
             />
           )}
         </div>
+        {/* Overdue warning popover */}
+        {isOverdue && section !== 'today' && showOverdue && (
+          <div className="absolute top-10 right-0 z-20 bg-red-100 border border-red-300 rounded shadow p-2 text-sm text-red-700 w-48 max-w-xs overflow-hidden">
+            <div className="flex items-center">
+              <AlertCircle className="w-4 h-4 mr-1 flex-shrink-0" />
+              <span className="truncate">This task is overdue</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-2">
         <div className="w-full">
           <div className="text-sm text-gray-700 mb-1 flex items-center">
             <span className="font-semibold mr-1">Due Date:</span>
@@ -135,20 +205,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
           </div>
           <div className="text-sm text-gray-700 mb-1 flex items-center">
             <span className="font-semibold mr-1">Status:</span>
-            <Badge variant={getStatusVariant(task.status)}>
-              <StatusIcon className="w-3 h-3 mr-1" />
+            <Badge variant={getStatusVariant(task.status)} className="px-3 py-1 text-base font-semibold shadow-sm animate-pulse">
+              <StatusIcon className="w-4 h-4 mr-1" />
               {task.status}
             </Badge>
-            {task.status === 'pending' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onStatusChange(task.id, 'completed')}
-                className="text-green-600 hover:text-green-700 ml-2"
-              >
-                Complete
-              </Button>
-            )}
           </div>
           {(showUser && task.user) || (user?.role === 'admin' && task.user) ? (
             <div className="text-sm text-gray-700 mb-1 flex items-center">
@@ -160,11 +220,42 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
 
-      {isOverdue && section !== 'today' && (
-        <div className="mt-3 p-2 bg-red-100 rounded text-sm text-red-700">
-          <AlertCircle className="w-4 h-4 inline mr-1" />
-          This task is overdue
+      {/* Progress input and bar for in-progress tasks */}
+      {task.status === 'in_progress' && (user?.role === 'admin' || task.user_id === user?.id) && onUpdate && (
+        <div className="mb-3 flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600 font-medium">Progress</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={progressInput}
+              onChange={handleProgressInputChange}
+              onBlur={commitProgress}
+              onKeyDown={handleProgressKeyDown}
+              className="w-16 text-center border border-gray-300 rounded focus:ring-2 focus:ring-yellow-400"
+            />
+            <span className="text-xs text-gray-700 font-semibold">%</span>
+          </div>
+          <div className="relative h-2 w-full bg-yellow-100 rounded-full overflow-hidden">
+            <div
+              className="absolute left-0 top-0 h-full bg-yellow-400 transition-all duration-500"
+              style={{ width: `${progressInput}%` }}
+            ></div>
+          </div>
         </div>
+      )}
+
+      {/* Complete button for all tasks except completed */}
+      {task.status !== 'completed' && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onStatusChange(task.id, 'completed')}
+          className="w-full mt-2 text-green-700 border-green-400 hover:bg-green-50 hover:border-green-600"
+        >
+          Mark as Complete
+        </Button>
       )}
 
       {/* Edit Modal */}

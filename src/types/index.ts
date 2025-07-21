@@ -45,6 +45,7 @@ export interface Task {
   user?: Member;
   project_id?: string;
   project?: Project;
+  progress: number; // 0-100
 }
 
 export interface Leave {

@@ -22,7 +22,7 @@ import { Project } from '../../types';
 import { authService } from '../../services/auth';
 import { useEffect } from 'react';
 import { format } from 'timeago.js';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -182,6 +182,97 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
       supabase.removeChannel(channel);
     };
   }, [user]);
+
+  // --- Admin notifications state and logic (mirroring member dashboard) ---
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
+  const [adminNotificationsLoading, setAdminNotificationsLoading] = useState(false);
+  // Helper to get/set dismissed notifications in localStorage
+  const getDismissedNotifications = () => {
+    if (!user?.id) return [];
+    try {
+      return JSON.parse(localStorage.getItem(`dismissedNotifications_${user.id}`) || '[]');
+    } catch {
+      return [];
+    }
+  };
+  const addDismissedNotification = (notifId: string) => {
+    if (!user?.id) return;
+    const dismissed = getDismissedNotifications();
+    if (!dismissed.includes(notifId)) {
+      localStorage.setItem(
+        `dismissedNotifications_${user.id}`,
+        JSON.stringify([...dismissed, notifId])
+      );
+    }
+  };
+  // Fetch notifications for the admin
+  const fetchAdminNotifications = async () => {
+    if (!user) return;
+    setAdminNotificationsLoading(true);
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    if (!error && data) {
+      const dismissed = getDismissedNotifications();
+      const unique = Object.values(
+        data.filter(n => !dismissed.includes(n.id)).reduce((acc, n) => {
+          acc[n.id] = n;
+          return acc;
+        }, {} as Record<string, any>)
+      );
+      setAdminNotifications(unique);
+    }
+    setAdminNotificationsLoading(false);
+  };
+  // Real-time notifications for admin (mirroring member dashboard)
+  useEffect(() => {
+    fetchAdminNotifications();
+    const interval = setInterval(fetchAdminNotifications, 10000); // Poll every 10s
+    if (!user || user.role !== 'admin') return () => clearInterval(interval);
+    const channel = supabase.channel('notifications-realtime-admin')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Realtime notification payload:', payload);
+          fetchAdminNotifications();
+          // Show toast
+          if (payload.new) {
+            let dateTime = '';
+            if (payload.new.created_at) {
+              const d = new Date(payload.new.created_at);
+              dateTime = `${d.getDate().toString().padStart(2, '0')} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+            }
+            toast(payload.new.title, {
+              description: `${payload.new.message}${dateTime ? `\n${dateTime}` : ''}`,
+              style: { background: '#2563eb', color: 'white' },
+              duration: 4500,
+            });
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Fetch notifications when switching to notifications tab
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      fetchAdminNotifications();
+    }
+  }, [activeTab]);
+
+  // Remove react-toastify ToastContainer usage
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -352,7 +443,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           <div className="text-gray-500">No {title.toLowerCase()}.</div>
         ) : (
           <>
-            <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+            <div className="h-80 flex">
+              <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+            </div>
             {tasks.length > 1 && !openSections[sectionKey] && (
               <button
                 onClick={() => toggleSection(sectionKey)}
@@ -365,7 +458,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
               <>
                 <div className="space-y-4">
                   {tasks.slice(1).map(task => (
-                    <TaskCard key={task.id} task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+                    <div key={task.id} className="h-80 flex">
+                      <TaskCard task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+                    </div>
                   ))}
                 </div>
                 <button
@@ -504,6 +599,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           {renderTaskSection('Upcoming Tasks', Clock, upcomingTasks, 'upcoming', 'upcoming')}
           {renderTaskSection('Blocked Tasks', AlertCircle, blockedTasks, 'blocked', 'blocked')}
         </div>
+        {/* Notifications summary at the top */}
+        {adminNotifications.length > 0 && (
+          <Card className="mb-6 p-4 border border-blue-200 bg-blue-50">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold text-blue-800">Recent Notifications</h2>
+              <Button size="sm" variant="primary" onClick={() => setActiveTab('notifications')}>
+                View All
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {adminNotifications.slice(0, 5).map(n => (
+                <div key={n.id + '-' + n.created_at} className="border-b last:border-b-0 pb-2 last:pb-0">
+                  <div className="font-semibold text-blue-900">{n.title}</div>
+                  <div className="text-sm text-blue-700">{n.message}</div>
+                  <div className="text-xs text-gray-500">{new Date(n.created_at).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
     );
   }
@@ -540,16 +655,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredTasks.map(task => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onDelete={deleteTask}
-                onStatusChange={handleStatusChange}
-                showUser={true}
-                onUpdate={handleTaskUpdate}
-              />
+              <div key={task.id} className="flex h-80">
+                <TaskCard
+                  task={task}
+                  onDelete={deleteTask}
+                  onStatusChange={handleStatusChange}
+                  showUser={true}
+                  onUpdate={handleTaskUpdate}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -721,9 +837,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                               <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances.sick_leaves}</span>
                               <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances.casual_leaves}</span>
                               <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances.paid_leaves}</span>
-                              {isSuperAdmin && (
-                                <Button size="sm" variant="outline" onClick={() => handleEditBalances(member.id, balances)}>Edit</Button>
-                              )}
                             </>
                           )}
                         </div>
@@ -1189,7 +1302,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                   <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
                   <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
                   <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
-                  <Button size="sm" variant="outline" onClick={() => openEditModal(member.id, balances)}>Edit</Button>
                 </div>
               </Card>
             );
@@ -1220,6 +1332,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
               <div className="text-xs text-gray-500 mt-2">These values override the default for this member for the year.</div>
             </div>
           </Modal>
+        )}
+      </div>
+    );
+  }
+
+  if (activeTab === 'notifications') {
+    return (
+      <div className="max-w-2xl mx-auto py-8">
+        <h1 className="text-2xl font-bold mb-6">Notifications</h1>
+        {adminNotificationsLoading ? (
+          <div className="text-gray-500">Loading notifications...</div>
+        ) : adminNotifications.length === 0 ? (
+          <div className="text-gray-500">No notifications.</div>
+        ) : (
+          <div className="space-y-4">
+            {adminNotifications.map(n => (
+              <Card key={n.id + '-' + n.created_at} className="flex items-center justify-between p-4 border border-gray-200 bg-white">
+                <div>
+                  <div className="font-semibold text-gray-900">{n.title}</div>
+                  <div className="text-sm text-gray-700">{n.message}</div>
+                  <div className="text-xs text-gray-500">{new Date(n.created_at).toLocaleString()}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="danger" onClick={() => {
+                    addDismissedNotification(n.id);
+                    setAdminNotifications(adminNotifications => adminNotifications.filter(x => x.id !== n.id));
+                    supabase.from('notifications').delete().eq('id', n.id);
+                  }}>
+                    Delete
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
         )}
       </div>
     );
