@@ -460,14 +460,15 @@ const handleDeleteHoliday = async (holidayId: string) => {
     return count;
   }
 
-  // Helper to count total days, Sundays, already leave days, and leave days in a range
-  function getDaysInfo(fromDate: string, toDate: string, existingLeaves: any[]) {
-    if (!fromDate || !toDate) return { total: 0, sundays: 0, alreadyLeave: 0, leaveDays: 0 };
+  // Helper to count total days, Sundays, already leave days, holidays, and leave days in a range
+  function getDaysInfo(fromDate: string, toDate: string, existingLeaves: any[], holidays: string[] = []) {
+    if (!fromDate || !toDate) return { total: 0, sundays: 0, alreadyLeave: 0, holidays: 0, leaveDays: 0 };
     const from = new Date(fromDate);
     const to = new Date(toDate);
     let total = 0;
     let sundays = 0;
     let alreadyLeave = 0;
+    let holidaysCount = 0;
     // Build set of already booked days
     const leaveDatesSet = new Set<string>();
     existingLeaves.forEach(leave => {
@@ -491,12 +492,14 @@ const handleDeleteHoliday = async (holidayId: string) => {
         sundays++;
       } else if (leaveDatesSet.has(dayStr)) {
         alreadyLeave++;
+      } else if (holidays.includes(dayStr)) {
+        holidaysCount++;
       } else {
         leaveDays++;
       }
       idx++;
     }
-    return { total, sundays, alreadyLeave, leaveDays };
+    return { total, sundays, alreadyLeave, holidays: holidaysCount, leaveDays };
   }
 
   async function handleApproveDeclineLeave(leaveId: string, status: 'approved' | 'rejected', userId: string, leaveDate: string, endDate: string | null, leaveType: string, category?: string, from_date?: string | null, to_date?: string | null) {
@@ -1002,12 +1005,14 @@ const handleDeleteHoliday = async (holidayId: string) => {
                           const info = getDaysInfo(
                             leave.from_date,
                             leave.to_date,
-                            leaves.filter(l => l.user_id === leave.user_id && l.id !== leave.id)
+                            leaves.filter(l => l.user_id === leave.user_id && l.id !== leave.id),
+                            holidays.map(h => h.date)
                           );
                           return (
                             <>
                               <span className="font-semibold">Total days:</span> {info.total} &nbsp;|&nbsp;
                               <span className="font-semibold">Sundays:</span> {info.sundays} &nbsp;|&nbsp;
+                              <span className="font-semibold">Holidays:</span> {info.holidays} &nbsp;|&nbsp;
                               <span className="font-semibold">Already leave:</span> {info.alreadyLeave} &nbsp;|&nbsp;
                               <span className="font-semibold">Leave days:</span> {info.leaveDays}
                             </>

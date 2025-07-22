@@ -6,8 +6,17 @@ import Card from '../ui/Card';
 import LeaveForm from './LeaveForm';
 import Modal from '../ui/Modal';
 
+interface Holiday {
+  id: string;
+  name: string;
+  date: string;
+  description?: string;
+  is_recurring?: boolean;
+}
+
 interface LeaveCalendarProps {
   leaves: Leave[];
+  holidays?: Holiday[];
   onAddLeave: (leave: Omit<Leave, 'id' | 'created_at' | 'updated_at'>) => void;
   onUpdateLeave?: (leave: Leave) => void;
   onDeleteLeave?: (id: string) => void;
@@ -16,6 +25,7 @@ interface LeaveCalendarProps {
 
 const LeaveCalendar: React.FC<LeaveCalendarProps> = ({ 
   leaves, 
+  holidays = [],
   onAddLeave, 
   onUpdateLeave,
   onDeleteLeave,
@@ -57,6 +67,11 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
     return leaves.find(leave => leave.leave_date === dateString);
   };
 
+  const getHolidayForDate = (day: number) => {
+    const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return holidays.find(holiday => holiday.date === dateString);
+  };
+
   const handleDateClick = (day: number) => {
     // First check if there are any approved leaves for this day
     const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -77,8 +92,11 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
       }
     });
     
-    // Only block if there are approved leaves for this day
-    if (leavesForDay.some(l => l.status === 'approved')) {
+    // Check if this day is a holiday
+    const holidayForDay = getHolidayForDate(day);
+    
+    // Block if there are approved leaves for this day OR if it's a holiday
+    if (leavesForDay.some(l => l.status === 'approved') || holidayForDay) {
       return;
     }
     
@@ -200,8 +218,11 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
             }
           });
 
-          // In the calendar grid, only disable if there is an approved leave for the day
-          const isDisabled = leavesForDay.some(l => l.status === 'approved');
+          // Check if this day is a holiday
+          const holidayForDay = getHolidayForDate(day);
+          
+          // In the calendar grid, disable if there is an approved leave for the day OR if it's a holiday
+          const isDisabled = leavesForDay.some(l => l.status === 'approved') || !!holidayForDay;
 
           const isToday =
             day === new Date().getDate() &&
@@ -214,6 +235,7 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
               className={`
                 p-2 h-20 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors
                 ${isToday ? 'bg-blue-50 border-blue-300' : ''}
+                ${holidayForDay ? 'bg-red-100 border-red-400' : ''}
                 ${leavesForDay.some(l => l.status === 'approved') ? 'bg-green-50 border-green-300' : ''}
                 ${leavesForDay.some(l => l.status === 'rejected') ? 'bg-red-50 border-red-300 hover:bg-red-100' : ''}
                 ${leavesForDay.some(l => l.status === 'pending') ? 'bg-yellow-50 border-yellow-300' : ''}
@@ -225,7 +247,14 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
                 <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
                   {day}
                 </span>
-                {leavesForDay.length > 0 && (
+                {holidayForDay && (
+                  <div className="flex-1 mt-1">
+                    <div className="text-xs bg-red-200 text-red-900 px-1 py-0.5 rounded truncate font-medium">
+                      🎉 {holidayForDay.name}
+                    </div>
+                  </div>
+                )}
+                {!holidayForDay && leavesForDay.length > 0 && (
                   <div className="flex-1 mt-1 space-y-1">
                     {leavesForDay.map(leave => (
                       <div key={leave.id} className="text-xs bg-red-100 text-red-800 px-1 py-0.5 rounded truncate">

@@ -62,6 +62,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [leaveBalance, setLeaveBalance] = useState<{ sick_leaves: number; casual_leaves: number; paid_leaves: number } | null>(null);
+  const [holidays, setHolidays] = useState<any[]>([]);
   useEffect(() => {
     if (activeTab !== 'leaves' || !user) return;
     const fetchBalance = async () => {
@@ -82,7 +83,27 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         setLeaveBalance(null);
       }
     };
+    
+    const fetchHolidays = async () => {
+      const { data, error } = await supabase
+        .from('company_holidays')
+        .select('*')
+        .order('date');
+      if (!error && data) {
+        // Map the database fields to match the Holiday interface expected by LeaveCalendar
+        const mappedHolidays = data.map(holiday => ({
+          id: holiday.id,
+          name: holiday.holiday_name, // Map holiday_name to name
+          date: holiday.date,
+          description: holiday.description,
+          is_recurring: false // Default value since it's not in the database
+        }));
+        setHolidays(mappedHolidays);
+      }
+    };
+    
     fetchBalance();
+    fetchHolidays();
 
     // Real-time subscription for leave balance
     const channel = supabase.channel('member-leave-balance-realtime')
@@ -238,6 +259,22 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
       supabase.removeChannel(channel);
     };
   }, [user, refetchTasks]);
+
+  // Fetch holidays
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      const { data, error } = await supabase
+        .from('holidays')
+        .select('*')
+        .order('date', { ascending: true });
+      
+      if (!error && data) {
+        setHolidays(data);
+      }
+    };
+    
+    fetchHolidays();
+  }, []);
 
   const filteredTasks = filterTasks(taskFilters);
 
@@ -582,6 +619,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         ) : (
           <LeaveCalendar
             leaves={leaves}
+            holidays={holidays} // Pass holidays to LeaveCalendar
             onAddLeave={addLeave}
             onUpdateLeave={handleUpdateLeave}
             onDeleteLeave={handleDeleteLeave}
@@ -596,6 +634,8 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
               onClose={() => setEditFormOpen(false)}
               onSubmit={handleUpdateLeave}
               selectedDate={editLeave.leave_date}
+              leaves={leaves}
+              holidays={holidays} // Pass holidays to LeaveForm
               initialData={editLeave}
               noModal={true}
             />

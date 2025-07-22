@@ -13,7 +13,8 @@ interface LeaveFormProps {
   selectedDate?: string;
   initialData?: any;
   noModal?: boolean;
-  leaves: Leave[]; // <-- add this
+  leaves: Leave[];
+  holidays?: { id: string; name: string; date: string; description?: string; is_recurring?: boolean; }[];
 }
 
 const LeaveForm: React.FC<LeaveFormProps> = ({ 
@@ -23,7 +24,8 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
   selectedDate, 
   initialData, 
   noModal = false,
-  leaves // <-- add this
+  leaves,
+  holidays = []
 }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -41,7 +43,8 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
   const [error, setError] = useState('');
-  const [holidays, setHolidays] = useState<string[]>([]); // store as array of date strings
+  const [fetchedHolidays, setFetchedHolidays] = useState<string[]>([]); // store as array of date strings
+  const [leaveBalance, setLeaveBalance] = useState<{ sick_leaves: number; casual_leaves: number; paid_leaves: number } | null>(null);
 
   useEffect(() => {
     if (initialData && isOpen) {
@@ -72,25 +75,149 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     // Fetch holidays for the current cycle
     const fetchHolidays = async () => {
       const { data, error } = await supabase
-        .from('company_holidays')
+        .from('holidays')
         .select('date')
         .gte('date', '2025-01-01') // Use the same cycle as before
         .lte('date', '2026-12-31'); // Use the same cycle as before
       if (!error && data) {
-        setHolidays(data.map((h: any) => h.date));
+        setFetchedHolidays(data.map((h: any) => h.date));
       }
     };
     fetchHolidays();
   }, []);
 
+  useEffect(() => {
+    // Fetch leave balance for the current user
+    const fetchLeaveBalance = async () => {
+      if (!user?.id) return;
+      
+      const { data, error } = await supabase
+        .from('member_leave_balances')
+        .select('sick_leaves, casual_leaves, paid_leaves')
+        .eq('member_id', user.id)
+        .eq('year', new Date().getFullYear())
+        .single();
+      
+      if (!error && data) {
+        setLeaveBalance(data);
+      }
+    };
+    
+    if (isOpen && user?.id) {
+      fetchLeaveBalance();
+    }
+  }, [isOpen, user?.id]);
+
+  // Helper function to check if a date is valid for selection
+  const isDateSelectable = (dateStr: string, isMultiDay: boolean = false) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
+    
+    // Check if date is in the past
+    if (date < today) {
+      return { valid: false, reason: 'Past dates are not selectable.' };
+    }
+    
+    // Check if date is a company holiday
+    const allHolidays = [...fetchedHolidays, ...holidays.map(h => h.date)];
+    if (allHolidays.includes(dateStr)) {
+      return { valid: false, reason: 'Company holidays are not selectable.' };
+    }
+    
+    // For multi-day leaves, check if date is Sunday
+    if (isMultiDay && date.getDay() === 0) {
+      return { valid: false, reason: 'Sundays are not selectable for multi-day leaves.' };
+    }
+    
+    // Check if date is already booked (excluding current leave being edited)
+    const isAlreadyBooked = leaves.some(leave => {
+      // Skip current leave being edited
+      if (initialData && leave.id === initialData.id) return false;
+      
+      if (leave.category === 'multi-day' && leave.from_date && leave.to_date) {
+        const fromDate = new Date(leave.from_date);
+        const toDate = new Date(leave.to_date);
+        return date >= fromDate && date <= toDate;
+      } else if (leave.leave_date) {
+        return new Date(leave.leave_date).getTime() === date.getTime();
+      }
+      return false;
+    });
+    
+    if (isAlreadyBooked) {
+      return { valid: false, reason: 'This date overlaps with an existing leave.' };
+    }
+    
+    return { valid: true, reason: '' };
+  };
+
+  // Helper function to validate leave balance
+  const validateLeaveBalance = (leaveType: string, requestedDays: number): boolean => {
+    if (!leaveBalance) {
+      toast.error('❌ Unable to fetch leave balance. Please try again.', {
+        autoClose: 4000,
+      });
+      return false;
+    }
+
+    let availableBalance = 0;
+    let leaveTypeName = '';
+
+    switch (leaveType) {
+      case 'sick':
+        availableBalance = leaveBalance.sick_leaves;
+        leaveTypeName = 'sick';
+        break;
+      case 'casual':
+        availableBalance = leaveBalance.casual_leaves;
+        leaveTypeName = 'casual';
+        break;
+      case 'paid':
+        availableBalance = leaveBalance.paid_leaves;
+        leaveTypeName = 'paid';
+        break;
+      default:
+        toast.error('❌ Invalid leave type selected.', {
+          autoClose: 4000,
+        });
+        return false;
+    }
+
+    if (requestedDays > availableBalance) {
+      toast.error(`❌ Insufficient ${leaveTypeName} leave balance. Available: ${availableBalance}, Requested: ${requestedDays}`, {
+        autoClose: 5000,
+      });
+      setError(`Insufficient ${leaveTypeName} leave balance. You have ${availableBalance} ${leaveTypeName} leaves remaining.`);
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     // Validation: ensure correct fields are set
     if (formData.category === 'single-day') {
       if (!formData.leave_date) {
         setError('Please select a leave date.');
         return;
       }
+      
+      // Validate single-day leave date
+      const validation = isDateSelectable(formData.leave_date, false);
+      if (!validation.valid) {
+        setError(validation.reason);
+        return;
+      }
+      
+      // Validate leave balance for single-day leave
+      if (!validateLeaveBalance(formData.leave_type, 1)) {
+        return;
+      }
+      
       // Clear multi-day fields
       formData.from_date = '';
       formData.to_date = '';
@@ -99,6 +226,49 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
         setError('Please select both from and to dates.');
         return;
       }
+      
+      // Validate from_date
+      const fromValidation = isDateSelectable(formData.from_date, true);
+      if (!fromValidation.valid) {
+        setError(`From date: ${fromValidation.reason}`);
+        return;
+      }
+      
+      // Validate to_date
+      const toValidation = isDateSelectable(formData.to_date, true);
+      if (!toValidation.valid) {
+        setError(`To date: ${toValidation.reason}`);
+        return;
+      }
+      
+      // Ensure from_date is not after to_date
+      if (new Date(formData.from_date) > new Date(formData.to_date)) {
+        setError('From date cannot be after to date.');
+        return;
+      }
+      
+      // Check for any overlapping dates in the range
+      const fromDate = new Date(formData.from_date);
+      const toDate = new Date(formData.to_date);
+      for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const validation = isDateSelectable(dateStr, true);
+        if (!validation.valid && !validation.reason.includes('Sundays')) {
+          // Allow Sundays in range but not other invalid dates
+          setError(`Date ${dateStr}: ${validation.reason}`);
+          return;
+        }
+      }
+      
+      // Calculate actual leave days for multi-day leave (excluding Sundays and holidays)
+      const daysInfo = getDaysInfo(formData.from_date, formData.to_date, leaves);
+      const actualLeaveDays = daysInfo.leaveDays;
+      
+      // Validate leave balance for multi-day leave
+      if (!validateLeaveBalance(formData.leave_type, actualLeaveDays)) {
+        return;
+      }
+      
       // Clear single-day field
       formData.leave_date = '';
     }
@@ -126,7 +296,32 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     }));
   };
 
-  // Helper to count total days, Sundays, and already leave days in a range
+  // Custom onChange for date fields with comprehensive validation
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    if (!value) {
+      setFormData(prev => ({ ...prev, [name]: value }));
+      setError('');
+      return;
+    }
+    
+    const isMultiDay = formData.category === 'multi-day';
+    const validation = isDateSelectable(value, isMultiDay);
+    
+    if (!validation.valid) {
+      toast.error(`❌ Date not selectable: ${validation.reason}`, {
+        style: { background: '#ef4444', color: 'white' },
+        autoClose: 4000,
+      });
+      return;
+    }
+    
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setError('');
+  };
+
+  // Helper to count total days, Sundays, already leave days, and holidays in a range
   function getDaysInfo(fromDate: string, toDate: string, existingLeaves: Leave[]) {
     if (!fromDate || !toDate) return { total: 0, sundays: 0, alreadyLeave: 0, holidays: 0, leaveDays: 0 };
     const from = new Date(fromDate);
@@ -135,6 +330,10 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     let sundays = 0;
     let alreadyLeave = 0;
     let holidaysCount = 0;
+    
+    // Combine all holiday dates
+    const allHolidays = [...fetchedHolidays, ...holidays.map(h => h.date)];
+    
     // Build set of already booked days
     const leaveDatesSet = new Set<string>();
     existingLeaves.forEach(leave => {
@@ -158,7 +357,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
         sundays++;
       } else if (leaveDatesSet.has(dayStr)) {
         alreadyLeave++;
-      } else if (holidays.includes(dayStr)) {
+      } else if (allHolidays.includes(dayStr)) {
         holidaysCount++;
       } else {
         leaveDays++;
@@ -184,21 +383,8 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     }
   });
   // Add holidays to bookedDatesSet for blocking selection
-  holidays.forEach(date => bookedDatesSet.add(date));
-
-  // Custom onChange for from_date and to_date to prevent selecting booked dates
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    if (bookedDatesSet.has(value) || holidays.includes(value)) {
-      toast('❌ Date not selectable', {
-        description: holidays.includes(value) ? 'This date is a company holiday.' : 'This date is already booked for another leave.',
-        style: { background: '#ef4444', color: 'white' },
-        duration: 4000,
-      });
-      return;
-    }
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  const allHolidays = [...fetchedHolidays, ...holidays.map(h => h.date)];
+  allHolidays.forEach(date => bookedDatesSet.add(date));
 
   // Define current cycle
   const cycleStart = '2025-01-01';
@@ -296,7 +482,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
               onChange={handleDateChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
-              min={cycleStart}
+              min={todayStr}
               max={cycleEnd}
             />
           </div>
@@ -311,7 +497,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
               onChange={handleDateChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
-              min={formData.from_date || cycleStart}
+              min={formData.from_date || todayStr}
               max={cycleEnd}
             />
           </div>
