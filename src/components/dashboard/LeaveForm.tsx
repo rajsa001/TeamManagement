@@ -198,36 +198,26 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation: ensure correct fields are set
+    let requestedDays = 1;
     if (formData.category === 'single-day') {
       if (!formData.leave_date) {
         setError('Please select a leave date.');
         return;
       }
-
-      // Check if the selected date is already booked (extra guard)
       if (bookedDatesSet.has(formData.leave_date)) {
         setError('This date is already booked or is a holiday. Please select another date.');
-        toast.error('❌ This date is already booked or is a holiday.', {
-          autoClose: 4000,
-        });
+        toast.error('❌ This date is already booked or is a holiday.', { autoClose: 4000 });
         return;
       }
-
-      // Validate single-day leave date
       const validation = isDateSelectable(formData.leave_date, false);
       if (!validation.valid) {
         setError(validation.reason);
         return;
       }
-
-      // Validate leave balance for single-day leave
       if (!validateLeaveBalance(formData.leave_type, 1)) {
         return;
       }
-
-      // Clear multi-day fields
+      requestedDays = 1;
       formData.from_date = '';
       formData.to_date = '';
     } else {
@@ -235,65 +225,85 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
         setError('Please select both from and to dates.');
         return;
       }
-      
-      // Validate from_date
       const fromValidation = isDateSelectable(formData.from_date, true);
       if (!fromValidation.valid) {
         setError(`From date: ${fromValidation.reason}`);
         return;
       }
-      
-      // Validate to_date
       const toValidation = isDateSelectable(formData.to_date, true);
       if (!toValidation.valid) {
         setError(`To date: ${toValidation.reason}`);
         return;
       }
-      
-      // Ensure from_date is not after to_date
       if (new Date(formData.from_date) > new Date(formData.to_date)) {
         setError('From date cannot be after to date.');
         return;
       }
-      
-      // Check for any overlapping dates in the range (excluding holidays in between)
       const fromDate = new Date(formData.from_date);
       const toDate = new Date(formData.to_date);
       for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
         const validation = isDateSelectable(dateStr, true);
-        
-        // For dates in between (not from/to dates), allow holidays but not existing leaves
         const isFromOrToDate = dateStr === formData.from_date || dateStr === formData.to_date;
-        
         if (!validation.valid) {
-          // Allow Sundays in range
-          if (validation.reason.includes('Sundays')) {
+          // Only block for from/to dates if overlap with existing leave
+          if (validation.reason.includes('This date overlaps with an existing leave.') && !isFromOrToDate) {
             continue;
           }
-          // Allow holidays in between dates, but not on from/to dates
-          if (validation.reason.includes('Company holidays') && !isFromOrToDate) {
-            continue;
-          }
-          // All other validation errors should be reported
+          if (validation.reason.includes('Sundays')) continue;
+          if (validation.reason.includes('Company holidays') && !isFromOrToDate) continue;
           setError(`Date ${dateStr}: ${validation.reason}`);
           return;
         }
       }
-      
-      // Calculate actual leave days for multi-day leave (excluding Sundays and holidays)
       const daysInfo = getDaysInfo(formData.from_date, formData.to_date, leaves);
-      const actualLeaveDays = daysInfo.leaveDays;
-      
-      // Validate leave balance for multi-day leave
-      if (!validateLeaveBalance(formData.leave_type, actualLeaveDays)) {
+      requestedDays = daysInfo.leaveDays;
+      if (!validateLeaveBalance(formData.leave_type, requestedDays)) {
         return;
       }
-      
-      // Clear single-day field
       formData.leave_date = '';
     }
     setError('');
+    // Deduct leave balance immediately
+    if (!leaveBalance) {
+      toast.error('❌ Unable to fetch leave balance. Please try again.', { autoClose: 4000 });
+      return;
+    }
+    if (!user?.id) {
+      toast.error('❌ User not found.', { autoClose: 4000 });
+      return;
+    }
+    let updatedBalance = {
+      sick_leaves: leaveBalance.sick_leaves,
+      casual_leaves: leaveBalance.casual_leaves,
+      paid_leaves: leaveBalance.paid_leaves,
+    };
+    switch (formData.leave_type) {
+      case 'sick':
+        updatedBalance.sick_leaves = Math.max(0, updatedBalance.sick_leaves - requestedDays);
+        break;
+      case 'casual':
+        updatedBalance.casual_leaves = Math.max(0, updatedBalance.casual_leaves - requestedDays);
+        break;
+      case 'paid':
+        updatedBalance.paid_leaves = Math.max(0, updatedBalance.paid_leaves - requestedDays);
+        break;
+      default:
+        toast.error('❌ Invalid leave type selected.', { autoClose: 4000 });
+        return;
+    }
+    // Update leave balance in DB
+    const { error: updateError } = await supabase
+      .from('member_leave_balances')
+      .update(updatedBalance)
+      .eq('member_id', user.id)
+      .eq('year', new Date().getFullYear());
+    if (updateError) {
+      toast.error('❌ Failed to update leave balance. Please try again.', { autoClose: 4000 });
+      return;
+    }
+    // Update local state for live display
+    setLeaveBalance(updatedBalance);
     onSubmit(formData);
     setFormData({
       category: 'single-day',

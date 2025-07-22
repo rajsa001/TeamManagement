@@ -1709,6 +1709,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
         initialData={editLeave}
         noModal={false}
         leaves={leaves}
+        holidays={holidays}
       />
     );
   }
