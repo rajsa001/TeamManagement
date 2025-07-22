@@ -205,19 +205,28 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
         setError('Please select a leave date.');
         return;
       }
-      
+
+      // Check if the selected date is already booked (extra guard)
+      if (bookedDatesSet.has(formData.leave_date)) {
+        setError('This date is already booked or is a holiday. Please select another date.');
+        toast.error('❌ This date is already booked or is a holiday.', {
+          autoClose: 4000,
+        });
+        return;
+      }
+
       // Validate single-day leave date
       const validation = isDateSelectable(formData.leave_date, false);
       if (!validation.valid) {
         setError(validation.reason);
         return;
       }
-      
+
       // Validate leave balance for single-day leave
       if (!validateLeaveBalance(formData.leave_type, 1)) {
         return;
       }
-      
+
       // Clear multi-day fields
       formData.from_date = '';
       formData.to_date = '';
