@@ -56,11 +56,11 @@ export const useTasks = () => {
       await refetchTasks();
       // Only show toast for member, not for admin self
       if (user?.role !== 'admin') {
-        toast('📝 New Task Added', {
-          description: `A new task has been assigned to you: ${data.task_name}`,
-          style: { background: '#2563eb', color: 'white' },
-          duration: 4500,
-        });
+      toast('📝 New Task Added', {
+        description: `A new task has been assigned to you: ${data.task_name}`,
+        style: { background: '#2563eb', color: 'white' },
+        duration: 4500,
+      });
       }
       // Send webhook to n8n automation (legacy)
       try {
@@ -260,19 +260,19 @@ export const useTasks = () => {
         if (user.role === 'admin') {
           // Notify only the member
           if (data.user_id) {
-            await supabase.from('notifications').insert([
-              {
-                user_id: data.user_id,
-                from_id: user.id,
-                to_id: data.user_id,
+        await supabase.from('notifications').insert([
+          {
+            user_id: data.user_id,
+            from_id: user.id,
+            to_id: data.user_id,
                 title: `${emoji} Task Status Updated by Admin`,
                 message: `Admin ${user.name} updated your task${projectName ? ` in project "${projectName}"` : ''}: "${data.task_name}" to ${statusText}`,
-                type: 'task_status_updated',
-                related_id: data.id,
-                related_type: 'task',
-                created_at: new Date().toISOString(),
-              },
-            ]);
+            type: 'task_status_updated',
+            related_id: data.id,
+            related_type: 'task',
+            created_at: new Date().toISOString(),
+          },
+        ]);
           }
         } else if (user.role === 'member') {
           // Notify all admins
@@ -301,7 +301,7 @@ export const useTasks = () => {
       } catch (notifError) {
         console.error('Failed to send notification for status update:', notifError);
       }
-    }
+      }
     // Show toast for progress update
     if (updates.progress !== undefined) {
       toast('📈 Task Progress Updated', {
@@ -411,17 +411,17 @@ export const useTasks = () => {
         if (admins && admins.length > 0) {
           await Promise.all(admins.map((admin: any) =>
             supabase.from('notifications').insert([
-              {
+            {
                 user_id: admin.id,
-                from_id: user.id,
+              from_id: user.id,
                 to_id: admin.id,
                 title: '🗑️ Task Deleted by Member',
                 message: `${user.name || 'A member'} deleted task${projectName ? ` in project "${projectName}"` : ''}: "${taskToDelete.task_name}"`,
                 type: 'task_status_updated',
                 related_id: id,
-                related_type: 'task',
-                created_at: new Date().toISOString(),
-              },
+              related_type: 'task',
+              created_at: new Date().toISOString(),
+            },
             ])
           ));
         }
@@ -472,4 +472,4 @@ export const useTasks = () => {
     filterTasks,
     deleteTask,
   };
-};
+}

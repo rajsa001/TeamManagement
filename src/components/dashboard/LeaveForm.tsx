@@ -4,6 +4,7 @@ import { Leave } from '../../types';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { toast } from 'react-toastify';
+import { supabase } from '../../lib/supabase';
 
 interface LeaveFormProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
   const [error, setError] = useState('');
+  const [holidays, setHolidays] = useState<string[]>([]); // store as array of date strings
 
   useEffect(() => {
     if (initialData && isOpen) {
@@ -65,6 +67,21 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
       setFormData(prev => ({ ...prev, user_id: user.id }));
     }
   }, [isOpen, user, initialData]);
+
+  useEffect(() => {
+    // Fetch holidays for the current cycle
+    const fetchHolidays = async () => {
+      const { data, error } = await supabase
+        .from('company_holidays')
+        .select('date')
+        .gte('date', '2025-01-01') // Use the same cycle as before
+        .lte('date', '2026-12-31'); // Use the same cycle as before
+      if (!error && data) {
+        setHolidays(data.map((h: any) => h.date));
+      }
+    };
+    fetchHolidays();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,12 +128,13 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
 
   // Helper to count total days, Sundays, and already leave days in a range
   function getDaysInfo(fromDate: string, toDate: string, existingLeaves: Leave[]) {
-    if (!fromDate || !toDate) return { total: 0, sundays: 0, alreadyLeave: 0, leaveDays: 0 };
+    if (!fromDate || !toDate) return { total: 0, sundays: 0, alreadyLeave: 0, holidays: 0, leaveDays: 0 };
     const from = new Date(fromDate);
     const to = new Date(toDate);
     let total = 0;
     let sundays = 0;
     let alreadyLeave = 0;
+    let holidaysCount = 0;
     // Build set of already booked days
     const leaveDatesSet = new Set<string>();
     existingLeaves.forEach(leave => {
@@ -140,12 +158,14 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
         sundays++;
       } else if (leaveDatesSet.has(dayStr)) {
         alreadyLeave++;
+      } else if (holidays.includes(dayStr)) {
+        holidaysCount++;
+      } else {
+        leaveDays++;
       }
       idx++;
     }
-    // Only days that are not Sundays and not already leave
-    const leaveDaysFinal = total - sundays - alreadyLeave;
-    return { total, sundays, alreadyLeave, leaveDays: leaveDaysFinal };
+    return { total, sundays, alreadyLeave, holidays: holidaysCount, leaveDays };
   }
 
   // Build set of already booked days (excluding Sundays)
@@ -163,13 +183,15 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
       if (d.getDay() !== 0) bookedDatesSet.add(d.toISOString().split('T')[0]);
     }
   });
+  // Add holidays to bookedDatesSet for blocking selection
+  holidays.forEach(date => bookedDatesSet.add(date));
 
   // Custom onChange for from_date and to_date to prevent selecting booked dates
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    if (bookedDatesSet.has(value)) {
-      toast('❌ Date already booked', {
-        description: 'This date is already booked for another leave.',
+    if (bookedDatesSet.has(value) || holidays.includes(value)) {
+      toast('❌ Date not selectable', {
+        description: holidays.includes(value) ? 'This date is a company holiday.' : 'This date is already booked for another leave.',
         style: { background: '#ef4444', color: 'white' },
         duration: 4000,
       });
@@ -301,6 +323,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
                 return <>
                   <span className="font-semibold">Total days:</span> {info.total} &nbsp;|&nbsp;
                   <span className="font-semibold">Sundays:</span> {info.sundays} &nbsp;|&nbsp;
+                  <span className="font-semibold">Holidays:</span> {info.holidays} &nbsp;|&nbsp;
                   <span className="font-semibold">Already leave:</span> {info.alreadyLeave} &nbsp;|&nbsp;
                   <span className="font-semibold">Leave days:</span> {info.leaveDays}
                 </>;

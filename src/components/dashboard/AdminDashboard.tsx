@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil } from 'lucide-react';
+import Modal from '../ui/Modal';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { TaskFilters } from '../../types';
@@ -15,7 +16,6 @@ import AdminsList from './AdminsList';
 import { useAuth } from '../../contexts/AuthContext';
 import ProjectCard from './ProjectCard';
 import { useProjects } from '../../hooks/useProjects';
-import Modal from '../ui/Modal';
 import { supabase } from '../../lib/supabase';
 import { Task } from '../../types';
 import { Project } from '../../types';
@@ -24,6 +24,7 @@ import { useEffect } from 'react';
 import { format } from 'timeago.js';
 import { toast } from 'sonner';
 import LeaveForm from './LeaveForm';
+import HolidayCalendar from './HolidayCalendar';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -64,10 +65,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   const [editProjectForm, setEditProjectForm] = useState({
     name: '',
     description: '',
-    client_name: '',
-    start_date: '',
-    expected_end_date: ''
-  });
+});
+
+// --- Holiday Add Handler ---
+const handleAddHoliday = async (holidayData: { name: string; date: string; description?: string }) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays')
+      .insert([{ ...holidayData, is_recurring: false }])
+      .select();
+    if (error) throw error;
+    if (data && data.length > 0) {
+      setHolidays((prev: any[]) => [...prev, ...data]);
+      toast.success('Holiday added successfully!');
+    }
+  } catch (error: any) {
+    toast.error(error.message || 'Failed to add holiday');
+  }
+};
+
+// --- Holiday Update Handler ---
+const handleUpdateHoliday = async (holidayData: { id: string; name: string; date: string; description?: string }) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays')
+      .update({ name: holidayData.name, date: holidayData.date, description: holidayData.description })
+      .eq('id', holidayData.id)
+      .select();
+    if (error) throw error;
+    if (data && data.length > 0) {
+      setHolidays((prev: any[]) => prev.map(h => h.id === holidayData.id ? data[0] : h));
+      toast.success('Holiday updated successfully!');
+    }
+  } catch (error: any) {
+    toast.error(error.message || 'Failed to update holiday');
+  }
+};
+
+// --- Holiday Delete Handler ---
+const handleDeleteHoliday = async (holidayId: string) => {
+  try {
+    const { error } = await supabase
+      .from('holidays')
+      .delete()
+      .eq('id', holidayId);
+    if (error) throw error;
+    setHolidays((prev: any[]) => prev.filter(h => h.id !== holidayId));
+    toast.success('Holiday deleted successfully!');
+  } catch (error: any) {
+    toast.error(error.message || 'Failed to delete holiday');
+  }
+};
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [openSections, setOpenSections] = useState({
     recentlyCompleted: false,
@@ -100,6 +148,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   // State for search and department filter
   const [teamSearch, setTeamSearch] = useState('');
 
+  // Add at the top, after other hooks
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [holidaysLoading, setHolidaysLoading] = useState(true);
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [editHoliday, setEditHoliday] = useState<any>(null);
+  const [holidayForm, setHolidayForm] = useState({
+    holiday_name: '',
+    date: '',
+    description: ''
+  });
+  const [holidaySaving, setHolidaySaving] = useState(false);
+  const [holidaySearch, setHolidaySearch] = useState('');
+  const [holidayView, setHolidayView] = useState<'calendar' | 'list'>('calendar');
+
   useEffect(() => {
     if (activeTab === 'leaves') {
       const fetchBalances = async () => {
@@ -120,7 +182,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
       };
       fetchDefaults();
     }
-  }, [leaves, activeTab, user]);
+    if (activeTab === 'holidays') {
+      const fetchHolidays = async () => {
+        setHolidaysLoading(true);
+        const { data, error } = await supabase
+          .from('company_holidays')
+          .select('*')
+          .gte('date', '2025-03-01')
+          .lte('date', '2026-02-28')
+          .order('date');
+        if (!error && data) {
+          setHolidays(data);
+        }
+        setHolidaysLoading(false);
+      };
+      fetchHolidays();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     let isMounted = true;
@@ -662,6 +740,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     };
     const adminName = user?.name || 'Admin';
 
+    // Find next 5 upcoming holidays
+    const upcomingHolidays = holidays
+      .filter(h => new Date(h.date) >= today)
+      .slice(0, 5);
+
     return (
       <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
         {/* Interactive animated greeting at the top */}
@@ -740,6 +823,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
             </div>
           </Card>
         )}
+        {/* Upcoming Holidays Section */}
+        <Card className="mb-6 p-4 border border-green-200 bg-green-50">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-bold text-green-800">Upcoming Holidays</h2>
+          </div>
+          <div className="space-y-2">
+            {upcomingHolidays.length === 0 ? (
+              <div className="text-gray-500">No upcoming holidays.</div>
+            ) : (
+              upcomingHolidays.map(h => (
+                <div key={h.id} className="border-b last:border-b-0 pb-2 last:pb-0 flex items-center gap-4">
+                  <CalendarIcon className="w-5 h-5 text-green-600" />
+                  <div className="font-semibold text-green-900">{h.name}</div>
+                  <div className="text-sm text-green-700">{new Date(h.date).toLocaleDateString()}</div>
+                  {h.description && <div className="text-xs text-gray-500 ml-2">{h.description}</div>}
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
       </div>
     );
   }
@@ -1504,9 +1607,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                     </>
                   ) : (
                     <>
-                      <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
-                      <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
-                      <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
+                  <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
+                  <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
+                  <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
                       <Button size="sm" variant="outline" onClick={() => {
                         setEditingBalances((prev) => ({ ...prev, [member.id]: true }));
                         setBalancesInput((prev: any) => ({ ...prev, [member.id]: { sick_leaves: balances?.sick_leaves ?? 30, casual_leaves: balances?.casual_leaves ?? 30, paid_leaves: balances?.paid_leaves ?? 30 } }));
@@ -1602,6 +1705,248 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
         noModal={false}
         leaves={leaves}
       />
+    );
+  }
+
+  // --- Company Holidays Tab ---
+  if (activeTab === 'holidays') {
+    const filteredHolidays = holidays.filter(h => 
+      h.holiday_name.toLowerCase().includes(holidaySearch.toLowerCase()) ||
+      (h.description && h.description.toLowerCase().includes(holidaySearch.toLowerCase())) ||
+      new Date(h.date).toLocaleDateString().includes(holidaySearch)
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold">Company Holidays</h2>
+          <div className="flex space-x-2">
+            <div className="inline-flex rounded-md shadow-sm" role="group">
+              <button
+                type="button"
+                className={`px-4 py-2 text-sm font-medium rounded-l-lg ${holidayView === 'calendar' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                onClick={() => setHolidayView('calendar')}
+              >
+                <div className="flex items-center">
+                  <CalendarDays className="h-4 w-4 mr-2" />
+                  Calendar View
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 text-sm font-medium rounded-r-lg ${holidayView === 'list' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                onClick={() => setHolidayView('list')}
+              >
+                <div className="flex items-center">
+                  <List className="h-4 w-4 mr-2" />
+                  List View
+                </div>
+              </button>
+            </div>
+            <Button onClick={() => {
+              setEditHoliday(null);
+              setHolidayForm({ holiday_name: '', date: '', description: '' });
+              setHolidayModalOpen(true);
+            }}>
+              Add Holiday
+            </Button>
+          </div>
+        </div>
+
+        {holidaysLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          </div>
+        ) : holidayView === 'calendar' ? (
+          <HolidayCalendar
+            holidays={filteredHolidays}
+            onAddHoliday={handleAddHoliday}
+            onUpdateHoliday={handleUpdateHoliday}
+            onDeleteHoliday={handleDeleteHoliday}
+            isAdmin={true}
+          />
+        ) : (
+          <Card>
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-4">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search holidays..."
+                    className="pl-10 pr-4 py-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={holidaySearch}
+                    onChange={(e) => setHolidaySearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {filteredHolidays.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Holiday Name</th>
+                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {filteredHolidays.map((h) => (
+                        <tr key={h.id} className="hover:bg-gray-50">
+                          <td className="p-2">{new Date(h.date).toLocaleDateString()}</td>
+                          <td className="p-2 font-semibold">{h.holiday_name}</td>
+                          <td className="p-2 text-sm text-gray-700">{h.description || '-'}</td>
+                          <td className="p-2 flex gap-2">
+                            {(() => {
+                              const holidayDate = new Date(h.date);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const isPastHoliday = holidayDate < today;
+                              
+                              return (
+                                <>
+                                  {!isPastHoliday && (
+                                    <Button size="sm" variant="outline" icon={Pencil} onClick={() => { 
+                                      setEditHoliday(h); 
+                                      setHolidayForm({ 
+                                        holiday_name: h.holiday_name, 
+                                        date: h.date, 
+                                        description: h.description || '' 
+                                      }); 
+                                      setHolidayModalOpen(true); 
+                                    }}>
+                                      Edit
+                                    </Button>
+                                  )}
+                                  <Button 
+                                    size="sm" 
+                                    variant="danger" 
+                                    onClick={async () => {
+                                      if (window.confirm('Are you sure you want to delete this holiday?')) {
+                                        await handleDeleteHoliday(h.id);
+                                      }
+                                    }}
+                                  >
+                                    Delete
+                                  </Button>
+                                </>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">No holidays found matching your search.</p>
+              )}
+            </div>
+          </Card>
+        )}
+        
+        <Modal 
+          isOpen={holidayModalOpen} 
+          onClose={() => setHolidayModalOpen(false)} 
+          title={editHoliday ? 'Edit Holiday' : 'Add Holiday'}
+        >
+          <form
+            onSubmit={async e => {
+              e.preventDefault();
+              
+              // Check if date is in the past
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const selectedDate = new Date(holidayForm.date);
+              
+              if (selectedDate < today) {
+                toast.error('Cannot select a past date for holidays. Please choose a future date.');
+                return;
+              }
+              
+              // Check if date already exists (only for new holidays)
+              if (!editHoliday) {
+                const existingHoliday = holidays.find(h => h.date === holidayForm.date);
+                if (existingHoliday) {
+                  toast.error(`A holiday already exists on ${new Date(holidayForm.date).toLocaleDateString()}: ${existingHoliday.holiday_name}`);
+                  return;
+                }
+              }
+              
+              setHolidaySaving(true);
+              const year = parseInt(holidayForm.date.slice(0, 4), 10);
+              
+              try {
+                if (editHoliday) {
+                  const { data, error } = await supabase.from('company_holidays').update({ ...holidayForm, year }).eq('id', editHoliday.id).select();
+                  if (error) {
+                    toast.error('Failed to update holiday: ' + error.message);
+                    return;
+                  }
+                  if (data && data[0]) {
+                    setHolidays(prev => prev.map(h => h.id === editHoliday.id ? data[0] : h));
+                    toast.success('Holiday updated successfully!');
+                  }
+                } else {
+                  const { data, error } = await supabase.from('company_holidays').insert({ ...holidayForm, year }).select();
+                  if (error) {
+                    toast.error('Failed to add holiday: ' + error.message);
+                    return;
+                  }
+                  if (data && data[0]) {
+                    setHolidays(prev => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+                    toast.success('Holiday added successfully!');
+                  }
+                }
+                setHolidayModalOpen(false);
+                setHolidayForm({ holiday_name: '', date: '', description: '' });
+                setEditHoliday(null);
+              } catch (error) {
+                toast.error('An unexpected error occurred. Please try again.');
+              } finally {
+                setHolidaySaving(false);
+              }
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Holiday Name *</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                placeholder="Holiday Name"
+                value={holidayForm.holiday_name}
+                onChange={e => setHolidayForm(f => ({ ...f, holiday_name: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                type="date"
+                value={holidayForm.date}
+                onChange={e => setHolidayForm(f => ({ ...f, date: e.target.value }))}
+                min={new Date().toISOString().split('T')[0]}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                className="w-full border rounded px-3 py-2"
+                placeholder="Description"
+                value={holidayForm.description}
+                onChange={e => setHolidayForm(f => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={holidaySaving}>{holidaySaving ? 'Saving...' : (editHoliday ? 'Update' : 'Add')}</Button>
+            </div>
+          </form>
+        </Modal>
+      </div>
     );
   }
 

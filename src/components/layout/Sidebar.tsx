@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
   CheckSquare, 
-  Calendar, 
+  CalendarDays, 
   Users, 
   BarChart3,
   UserPlus,
   Folder,
   User,
   BarChart2,
-  Bell
+  Bell,
+  CalendarRange
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavLink } from 'react-router-dom'; // Added for NavLink
@@ -35,7 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
   const memberTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tasks', label: 'My Tasks', icon: CheckSquare },
-    { id: 'leaves', label: 'My Leaves', icon: Calendar },
+    { id: 'leaves', label: 'My Leaves', icon: CalendarDays },
     { id: 'projects', label: 'Projects', icon: BarChart3 },
     { id: 'notifications', label: 'Notifications', icon: Bell }, // Notifications tab
     { id: 'profile', label: 'Profile', icon: Users },
@@ -44,7 +45,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tasks', label: 'All Tasks', icon: CheckSquare },
-    { id: 'leaves', label: 'All Leaves', icon: Calendar },
+    { id: 'leaves', label: 'All Leaves', icon: CalendarDays },
+    { id: 'holidays', label: 'Company Holidays', icon: CalendarRange },
     { id: 'team', label: 'Team', icon: Users },
     { id: 'reports', label: 'Reports', icon: BarChart2 }, // Use BarChart2 for Reports
     { id: 'projects', label: 'Projects', icon: Folder },
@@ -53,7 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
     { id: 'admin-management', label: 'Admin Management', icon: UserPlus },
   ];
   if (isSuperAdmin) {
-    adminTabs.splice(3, 0, { id: 'leave-defaults', label: 'Leave Management', icon: Calendar });
+    adminTabs.splice(3, 0, { id: 'leave-defaults', label: 'Leave Management', icon: CalendarDays });
   }
 
   const tabs = user?.role === 'admin' ? adminTabs : memberTabs;
