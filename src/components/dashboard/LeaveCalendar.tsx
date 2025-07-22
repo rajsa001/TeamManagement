@@ -58,7 +58,30 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
   };
 
   const handleDateClick = (day: number) => {
+    // First check if there are any approved leaves for this day
     const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const leavesForDay = leaves.filter(leave => {
+      if (leave.category === 'multi-day') {
+        if (leave.from_date && leave.to_date) {
+          const from = new Date(leave.from_date);
+          const to = new Date(leave.to_date);
+          const thisDay = new Date(dateString);
+          from.setHours(0,0,0,0);
+          to.setHours(0,0,0,0);
+          thisDay.setHours(0,0,0,0);
+          return from <= thisDay && thisDay <= to;
+        }
+        return false;
+      } else {
+        return leave.leave_date === dateString;
+      }
+    });
+    
+    // Only block if there are approved leaves for this day
+    if (leavesForDay.some(l => l.status === 'approved')) {
+      return;
+    }
+    
     setSelectedDate(dateString);
     setIsFormOpen(true);
   };
@@ -164,23 +187,21 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
           const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const leavesForDay = leaves.filter(leave => {
             if (leave.category === 'multi-day') {
-              if (leave.from_date && leave.to_date) {
-                const from = new Date(leave.from_date ?? '');
-                const to = new Date(leave.to_date ?? '');
-                const thisDay = new Date(dateString);
-                from.setHours(0,0,0,0);
-                to.setHours(0,0,0,0);
-                thisDay.setHours(0,0,0,0);
-                return from <= thisDay && thisDay <= to;
-              }
-              return false;
+              if (!leave.from_date || !leave.to_date) return false;
+              const from = new Date(leave.from_date);
+              const to = new Date(leave.to_date);
+              const thisDay = new Date(dateString);
+              from.setHours(0,0,0,0);
+              to.setHours(0,0,0,0);
+              thisDay.setHours(0,0,0,0);
+              return from <= thisDay && thisDay <= to;
             } else {
               return leave.leave_date === dateString;
             }
           });
 
-          // In the calendar grid, only disable if there is a non-declined leave for the day
-          const isDisabled = leavesForDay.some(l => l.status !== 'rejected');
+          // In the calendar grid, only disable if there is an approved leave for the day
+          const isDisabled = leavesForDay.some(l => l.status === 'approved');
 
           const isToday =
             day === new Date().getDate() &&
@@ -189,11 +210,13 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
 
           return (
             <div
-              key={day}
+              key={index}
               className={`
                 p-2 h-20 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors
                 ${isToday ? 'bg-blue-50 border-blue-300' : ''}
-                ${leavesForDay.length > 0 ? 'bg-red-50 border-red-300' : ''}
+                ${leavesForDay.some(l => l.status === 'approved') ? 'bg-green-50 border-green-300' : ''}
+                ${leavesForDay.some(l => l.status === 'rejected') ? 'bg-red-50 border-red-300 hover:bg-red-100' : ''}
+                ${leavesForDay.some(l => l.status === 'pending') ? 'bg-yellow-50 border-yellow-300' : ''}
                 ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
               `}
               onClick={() => !isDisabled && handleDateClick(day)}
@@ -247,6 +270,7 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
                   )}
                   <div><strong>Status:</strong> {leave.status}</div>
                   <div className="flex gap-2 mt-2">
+                    <Button size="sm" variant="primary" onClick={() => { setEditLeave(leave); setEditFormOpen(true); }}>Edit</Button>
                     <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
                   </div>
                 </div>
@@ -276,9 +300,6 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
                     </>
                   )}
                   <div><strong>Status:</strong> {leave.status}</div>
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
-                  </div>
                 </div>
               ))}
             </div>
@@ -306,9 +327,6 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
                     </>
                   )}
                   <div><strong>Status:</strong> {leave.status}</div>
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" variant="danger" onClick={() => { setDeleteLeaveId(leave.id); setDeleteConfirmOpen(true); }}>Delete</Button>
-                  </div>
                 </div>
               ))}
             </div>
@@ -324,6 +342,7 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
         }}
         onSubmit={onAddLeave}
         selectedDate={selectedDate}
+        leaves={leaves}
       />
       {/* Edit Leave Modal */}
       {editFormOpen && editLeave && (
@@ -334,15 +353,15 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
             setEditLeave(null);
           }}
           onSubmit={leave => {
-            if (onUpdateLeave) onUpdateLeave({ ...editLeave, ...leave });
+            if (onUpdateLeave && editLeave) onUpdateLeave({ ...editLeave, ...leave, id: editLeave.id });
             setEditFormOpen(false);
             setEditLeave(null);
           }}
-          selectedDate={editLeave.leave_date || undefined}
+          selectedDate={editLeave?.leave_date || undefined}
           initialData={editLeave}
           noModal={false}
-          />
-        
+          leaves={leaves}
+        />
       )}
       {/* Delete Confirmation Modal */}
       {deleteConfirmOpen && (

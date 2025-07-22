@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { TaskFilters } from '../../types';
@@ -23,6 +23,7 @@ import { authService } from '../../services/auth';
 import { useEffect } from 'react';
 import { format } from 'timeago.js';
 import { toast } from 'sonner';
+import LeaveForm from './LeaveForm';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -80,8 +81,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
   const [leaveBalancesLoading, setLeaveBalancesLoading] = useState(true);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  // State for editing balances
   const [editingBalances, setEditingBalances] = useState<{ [memberId: string]: boolean }>({});
-  const [balancesInput, setBalancesInput] = useState<any>({});
+  const [balancesInput, setBalancesInput] = useState<{ [memberId: string]: { sick_leaves: number; casual_leaves: number; paid_leaves: number } }>({});
   const [leaveDefaults, setLeaveDefaults] = useState({ sick_leaves: 30, casual_leaves: 30, paid_leaves: 30 });
   const [editingDefaults, setEditingDefaults] = useState(false);
   const [defaultsInput, setDefaultsInput] = useState({ sick_leaves: 30, casual_leaves: 30, paid_leaves: 30 });
@@ -93,6 +95,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   const [leavesSearch, setLeavesSearch] = useState('');
   const [leavesDate, setLeavesDate] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
+  const [editLeave, setEditLeave] = useState<any | null>(null);
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  // State for search and department filter
+  const [teamSearch, setTeamSearch] = useState('');
+
   useEffect(() => {
     if (activeTab === 'leaves') {
       const fetchBalances = async () => {
@@ -223,6 +230,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
         }, {} as Record<string, any>)
       );
       setAdminNotifications(unique);
+      // Dispatch event for notification dot
+      window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: unique.some(n => !n.is_read) } }));
     }
     setAdminNotificationsLoading(false);
   };
@@ -267,6 +276,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
             
             // Update notifications list immediately
             fetchAdminNotifications();
+            // Dispatch notification dot event
+            window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: true } }));
           }
         }
       )
@@ -284,6 +295,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   useEffect(() => {
     if (activeTab === 'notifications') {
       fetchAdminNotifications();
+      // Mark notifications as read when admin views them
+      if (adminNotifications.length > 0) {
+        const unreadNotifications = adminNotifications.filter(n => !n.is_read);
+        if (unreadNotifications.length > 0) {
+          // Mark all as read
+          Promise.all(unreadNotifications.map(notification =>
+            supabase.from('notifications').update({ is_read: true }).eq('id', notification.id)
+          )).then(() => {
+            // Update local state and dispatch dot event
+            setAdminNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+            window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread: false } }));
+          });
+        }
+      }
     }
   }, [activeTab]);
 
@@ -346,18 +371,99 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
     }
   };
 
+  // Helper to count non-Sunday days in a date range (inclusive)
+  function countNonSundayDays(fromDate: string, toDate: string): number {
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    let count = 0;
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== 0) count++; // 0 = Sunday
+    }
+    return count;
+  }
+
+  // Helper to count total days, Sundays, already leave days, and leave days in a range
+  function getDaysInfo(fromDate: string, toDate: string, existingLeaves: any[]) {
+    if (!fromDate || !toDate) return { total: 0, sundays: 0, alreadyLeave: 0, leaveDays: 0 };
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    let total = 0;
+    let sundays = 0;
+    let alreadyLeave = 0;
+    // Build set of already booked days
+    const leaveDatesSet = new Set<string>();
+    existingLeaves.forEach(leave => {
+      if (leave.category === 'multi-day' && leave.from_date && leave.to_date) {
+        let d = new Date(leave.from_date);
+        const to2 = new Date(leave.to_date);
+        while (d <= to2) {
+          leaveDatesSet.add(d.toISOString().split('T')[0]);
+          d.setDate(d.getDate() + 1);
+        }
+      } else if (leave.leave_date) {
+        leaveDatesSet.add(new Date(leave.leave_date).toISOString().split('T')[0]);
+      }
+    });
+    let leaveDays = 0;
+    let idx = 0;
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      total++;
+      const dayStr = d.toISOString().split('T')[0];
+      if (d.getDay() === 0) {
+        sundays++;
+      } else if (leaveDatesSet.has(dayStr)) {
+        alreadyLeave++;
+      } else {
+        leaveDays++;
+      }
+      idx++;
+    }
+    return { total, sundays, alreadyLeave, leaveDays };
+  }
+
   async function handleApproveDeclineLeave(leaveId: string, status: 'approved' | 'rejected', userId: string, leaveDate: string, endDate: string | null, leaveType: string, category?: string, from_date?: string | null, to_date?: string | null) {
-    // Update leave status
-    await updateLeave(leaveId, { status });
+    // Fetch the full leave object first
+    const { data: leave, error: leaveError } = await supabase
+      .from('leaves')
+      .select('*')
+      .eq('id', leaveId)
+      .single();
+    if (leaveError || !leave) {
+      alert('Failed to fetch leave for approval.');
+      return;
+    }
+    const prevStatus = leave.status;
+    // Only proceed if the status is actually changing
+    if (prevStatus === status) {
+      alert(`Leave is already ${status}.`);
+      return;
+    }
+    // Update leave status, but keep all other fields
+    await updateLeave(leaveId, { ...leave, status });
+
+    // Fetch the leave again to confirm status
+    const { data: updatedLeave, error: updatedLeaveError } = await supabase
+      .from('leaves')
+      .select('*')
+      .eq('id', leaveId)
+      .single();
+    if (updatedLeaveError || !updatedLeave) {
+      alert('Failed to fetch leave after approval.');
+      return;
+    }
+    console.log('[LEAVE APPROVAL DEBUG]', { prevStatus, newStatus: updatedLeave.status });
+
+    // --- REMOVED: Balance update code. Now handled by DB trigger. ---
+
     // Send notification to member
     const isApproved = status === 'approved';
     const notifType = isApproved ? 'leave_approved' : 'leave_rejected';
     const notifTitle = isApproved ? 'Leave Approved' : 'Leave Rejected';
     let leaveDateStr = '';
-    if (category === 'multi-day' && from_date && to_date) {
-      leaveDateStr = `Type: Multi-day | From: ${from_date} | To: ${to_date} | Leave Type: ${leaveType}`;
+    if (updatedLeave.category === 'multi-day' && updatedLeave.from_date && updatedLeave.to_date) {
+      leaveDateStr = `Type: Multi-day | From: ${updatedLeave.from_date} | To: ${updatedLeave.to_date} | Leave Type: ${updatedLeave.leave_type}`;
     } else {
-      leaveDateStr = `Type: Single Day | Date: ${leaveDate} | Leave Type: ${leaveType}`;
+      leaveDateStr = `Type: Single Day | Date: ${updatedLeave.leave_date} | Leave Type: ${updatedLeave.leave_type}`;
     }
     const notifMsg = isApproved
       ? `Your leave request (${leaveDateStr}) has been approved.`
@@ -725,7 +831,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           casual_leaves: input.casual_leaves,
           paid_leaves: input.paid_leaves,
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'member_id,year' });
       setEditingBalances((prev) => ({ ...prev, [memberId]: false }));
       setLeaveBalancesLoading(true);
       const res = await supabase
@@ -770,13 +876,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                     <div className="text-xs text-gray-400 mb-1">{leave.created_at ? format(leave.created_at) : ''}</div>
                     <div className="text-sm text-gray-700">
                       <span className="font-medium">Type:</span> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}
-                      {leave.category === 'multi-day' ? (
+                      {leave.category === 'multi-day' && leave.from_date && leave.to_date && (
                         <>
                           <span className="mx-2">|</span><span className="font-medium">From:</span> {leave.from_date} <span className="font-medium">To:</span> {leave.to_date}
-                        </>
-                      ) : (
-                        <>
-                          <span className="mx-2">|</span><span className="font-medium">Date:</span> {leave.leave_date}
                         </>
                       )}
                       <span className="mx-2">|</span><span className="font-medium">Leave Type:</span> {leave.leave_type}
@@ -790,6 +892,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                         ${leave.status === 'rejected' ? 'bg-red-100 text-red-800' : ''}
                       `}>{leave.status}</span>
                     </div>
+                    {/* Live days breakdown for multi-day leaves */}
+                    {leave.category === 'multi-day' && leave.from_date && leave.to_date && (
+                      <div className="text-xs text-gray-700 bg-gray-50 rounded p-2 mt-1">
+                        {(() => {
+                          const info = getDaysInfo(
+                            leave.from_date,
+                            leave.to_date,
+                            leaves.filter(l => l.user_id === leave.user_id && l.id !== leave.id)
+                          );
+                          return (
+                            <>
+                              <span className="font-semibold">Total days:</span> {info.total} &nbsp;|&nbsp;
+                              <span className="font-semibold">Sundays:</span> {info.sundays} &nbsp;|&nbsp;
+                              <span className="font-semibold">Already leave:</span> {info.alreadyLeave} &nbsp;|&nbsp;
+                              <span className="font-semibold">Leave days:</span> {info.leaveDays}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                     <div className="flex flex-row md:flex-col gap-2 mt-4 md:mt-0 md:ml-6">
                       <Button variant="primary" size="sm" onClick={async () => await handleApproveDeclineLeave(leave.id, 'approved', leave.user_id, leave.leave_date, leave.end_date ?? null, leave.leave_type, leave.category, leave.from_date, leave.to_date)}>Approve</Button>
@@ -840,7 +962,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                                 <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.paid_leaves ?? balances?.paid_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], paid_leaves: +e.target.value } }))} />
                               </label>
                               <div className="flex gap-2 ml-2 mt-2 md:mt-0">
-                                <Button size="sm" variant="primary" onClick={() => handleSaveBalances(member.id)} disabled={savingMemberId === member.id}>
+                                <Button size="sm" variant="primary" onClick={async () => {
+                                  setSavingMemberId(member.id);
+                                  const input = balancesInput[member.id];
+                                  const { error } = await supabase
+                                    .from('member_leave_balances')
+                                    .upsert({
+                                      member_id: member.id,
+                                      year: year,
+                                      sick_leaves: input.sick_leaves,
+                                      casual_leaves: input.casual_leaves,
+                                      paid_leaves: input.paid_leaves,
+                                      updated_at: new Date().toISOString(),
+                                    }, { onConflict: 'member_id,year' });
+                                  if (!error) {
+                                    toast('✅ Leave balances updated', { style: { background: '#10b981', color: 'white' }, duration: 3000 });
+                                  } else {
+                                    toast('❌ Failed to update leave balances', { style: { background: '#ef4444', color: 'white' }, duration: 4000 });
+                                  }
+                                  setEditingBalances((prev) => ({ ...prev, [member.id]: false }));
+                                  setLeaveBalancesLoading(true);
+                                  const res = await supabase
+                                    .from('member_leave_balances')
+                                    .select('*');
+                                  setLeaveBalances(res.data || []);
+                                  setLeaveBalancesLoading(false);
+                                  setSavingMemberId(null);
+                                }} disabled={savingMemberId === member.id}>
                                   {savingMemberId === member.id ? 'Saving...' : 'Save'}
                                 </Button>
                                 <Button size="sm" variant="outline" onClick={() => setEditingBalances((prev) => ({ ...prev, [member.id]: false }))} disabled={savingMemberId === member.id}>Cancel</Button>
@@ -870,6 +1018,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                                 <span className="ml-2 text-xs">({lv.status})</span>
                               </div>
                               <div className="text-xs text-gray-500">Reason: {lv.reason}</div>
+                              <Button variant="outline" size="sm" icon={Pencil} onClick={() => { setEditLeave(lv); setEditFormOpen(true); }}>Edit</Button>
                             </div>
                           ))
                         )}
@@ -887,7 +1036,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
 
   if (activeTab === 'team') {
     return (
-      <MembersList />
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Team Members</h1>
+        <MembersList members={members} />
+      </div>
     );
   }
 
@@ -1309,16 +1461,60 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           {filteredMembers.length === 0 ? (
             <div className="text-gray-500 text-center">No members found.</div>
           ) : filteredMembers.map(member => {
-            const balances = leaveBalances.find((b: any) => b.member_id === member.id && b.year === year);
+            const balances = leaveBalances.find(b => b.member_id === member.id && b.year === year);
             return (
-              <Card key={member.id} className="border border-gray-200 bg-white p-4 flex flex-col md:flex-row md:items-center md:justify-between">
-                <div className="font-semibold text-gray-900 text-base mb-2 md:mb-0">{member.name}</div>
-                <div className="flex gap-2 items-center flex-wrap">
-                  <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
-                  <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
-                  <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
+              <div key={member.id} className="flex items-center justify-between bg-white rounded-lg shadow p-4 mb-4 border border-gray-100">
+                <div className="font-semibold text-lg text-gray-900">{member.name}</div>
+                <div className="flex gap-3 items-center">
+                  {editingBalances[member.id] ? (
+                    <>
+                      <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.sick_leaves ?? balances?.sick_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], sick_leaves: +e.target.value } }))} />
+                      <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.casual_leaves ?? balances?.casual_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], casual_leaves: +e.target.value } }))} />
+                      <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.paid_leaves ?? balances?.paid_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], paid_leaves: +e.target.value } }))} />
+                      <Button size="sm" variant="primary" onClick={async () => {
+                        setSavingMemberId(member.id);
+                        const input = balancesInput[member.id];
+                        const { error } = await supabase
+                          .from('member_leave_balances')
+                          .upsert({
+                            member_id: member.id,
+                            year: year,
+                            sick_leaves: input.sick_leaves,
+                            casual_leaves: input.casual_leaves,
+                            paid_leaves: input.paid_leaves,
+                            updated_at: new Date().toISOString(),
+                          }, { onConflict: 'member_id,year' });
+                        if (!error) {
+                          toast('✅ Leave balances updated', { style: { background: '#10b981', color: 'white' }, duration: 3000 });
+                        } else {
+                          toast('❌ Failed to update leave balances', { style: { background: '#ef4444', color: 'white' }, duration: 4000 });
+                        }
+                        setEditingBalances((prev) => ({ ...prev, [member.id]: false }));
+                        setLeaveBalancesLoading(true);
+                        const res = await supabase
+                          .from('member_leave_balances')
+                          .select('*');
+                        setLeaveBalances(res.data || []);
+                        setLeaveBalancesLoading(false);
+                        setSavingMemberId(null);
+                      }} disabled={savingMemberId === member.id}>
+                        {savingMemberId === member.id ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditingBalances((prev) => ({ ...prev, [member.id]: false }))} disabled={savingMemberId === member.id}>Cancel</Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
+                      <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
+                      <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
+                      <Button size="sm" variant="outline" onClick={() => {
+                        setEditingBalances((prev) => ({ ...prev, [member.id]: true }));
+                        setBalancesInput((prev: any) => ({ ...prev, [member.id]: { sick_leaves: balances?.sick_leaves ?? 30, casual_leaves: balances?.casual_leaves ?? 30, paid_leaves: balances?.paid_leaves ?? 30 } }));
+                      }}>Edit</Button>
+                    </>
+                  )}
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
@@ -1374,6 +1570,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
                     addDismissedNotification(n.id);
                     setAdminNotifications(adminNotifications => adminNotifications.filter(x => x.id !== n.id));
                     supabase.from('notifications').delete().eq('id', n.id);
+                    // Update notification dot
+                    const remainingNotifications = adminNotifications.filter(x => x.id !== n.id);
+                    const hasUnread = remainingNotifications.some(notification => !notification.is_read);
+                    window.dispatchEvent(new CustomEvent('notifications-dot', { detail: { hasUnread } }));
                   }}>
                     Delete
                   </Button>
@@ -1383,6 +1583,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
           </div>
         )}
       </div>
+    );
+  }
+
+  if (editFormOpen && editLeave) {
+    return (
+      <LeaveForm
+        isOpen={editFormOpen}
+        onClose={() => { setEditFormOpen(false); setEditLeave(null); }}
+        onSubmit={leave => {
+          // Call updateLeave (reuse the member logic or call your admin update function)
+          updateLeave(leave.id, leave);
+          setEditFormOpen(false);
+          setEditLeave(null);
+        }}
+        selectedDate={editLeave?.leave_date || undefined}
+        initialData={editLeave}
+        noModal={false}
+        leaves={leaves}
+      />
     );
   }
 

@@ -83,6 +83,26 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
       }
     };
     fetchBalance();
+
+    // Real-time subscription for leave balance
+    const channel = supabase.channel('member-leave-balance-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'member_leave_balances',
+          filter: `member_id=eq.${user.id}`,
+        },
+        (payload) => {
+          // Refetch leave balance on any change
+          fetchBalance();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activeTab, user]);
 
   // Helper to get/set dismissed notifications in localStorage
@@ -517,10 +537,19 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   }
 
   if (activeTab === 'leaves') {
+    // At the top of the member's leave management page:
+    const today = new Date();
+    const todayStr = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    const cycleLabel = '2025-2026';
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">My Leaves</h1>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Leaves Management</h1>
+            <div className="text-sm text-blue-700 mt-1">
+              Year: <span className="font-semibold">{cycleLabel}</span> &nbsp; Today: <span className="font-semibold text-green-700">{todayStr}</span>
+            </div>
+          </div>
         </div>
         {/* Remaining Leaves Section */}
         <div className="mb-4">

@@ -198,7 +198,7 @@ export const useTasks = () => {
     const prevTask = tasks.find(task => task.id === id);
     const prevStatus = prevTask?.status;
     // Only allow valid statuses
-    const validStatuses = ['pending', 'in_progress', 'completed', 'blocked', 'cancelled'];
+    const validStatuses = ['pending', 'in_progress', 'completed'];
     if (updates.status && !validStatuses.includes(updates.status)) {
       console.error('Invalid status for updateTask:', updates.status);
       alert('Invalid status. Cannot update task.');
@@ -231,188 +231,6 @@ export const useTasks = () => {
     if (updates.status && prevStatus && updates.status !== prevStatus) {
       let emoji = '';
       let statusText = '';
-      let bgColor = '';
-      if (updates.status === 'completed') {
-        emoji = '🎉';
-        statusText = 'completed';
-        bgColor = '#22c55e'; // green
-      } else if (updates.status === 'in_progress') {
-        emoji = '⏳';
-        statusText = 'in progress';
-        bgColor = '#eab308'; // yellow
-      } else if (updates.status === 'pending' || updates.status === 'not_started') {
-        emoji = '⏳';
-        statusText = updates.status === 'pending' ? 'pending' : 'not started';
-        bgColor = '#ef4444'; // red
-      } else if (updates.status === 'blocked') {
-        emoji = '🛑';
-        statusText = 'blocked';
-        bgColor = '#6b7280'; // gray
-      } else if (updates.status === 'cancelled') {
-        emoji = '🚫';
-        statusText = 'cancelled';
-        bgColor = '#6b7280'; // gray
-      }
-      toast(`${emoji} Task Status Updated`, {
-        description: `Status for task "${data.task_name}" changed to ${statusText}.`,
-        style: { background: bgColor, color: 'white' },
-        duration: 4500,
-      });
-    }
-    // Show toast for progress update
-    if (updates.progress !== undefined) {
-      toast('📈 Task Progress Updated', {
-        description: `Progress for task "${data.task_name}" is now ${data.progress}%`,
-        style: { background: '#eab308', color: 'black' },
-        duration: 3000,
-      });
-    }
-    // Send webhook to n8n automation for task update (legacy)
-    try {
-      await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: data.id,
-          task_name: data.task_name,
-          description: data.description,
-          assigned_to: data.user_id,
-          due_date: data.due_date,
-          created_by: data.created_by,
-          status: data.status,
-          member_email: user ? user.email : '',
-          event: 'task-updated',
-        }),
-      });
-    } catch (webhookError) {
-      console.error('Failed to send task updated webhook:', webhookError);
-    }
-    // --- NEW: Send to admin automation pipeline if status changed ---
-    let webhookError = null;
-    if (updates.status && prevStatus && updates.status !== prevStatus) {
-      // Fetch member name and email
-      let memberName = '';
-      let memberEmail = '';
-      let projectName = '';
-      if (data.user_id) {
-        const { data: member, error: memberError } = await supabase
-          .from('members')
-          .select('name, email')
-          .eq('id', data.user_id)
-          .single();
-        if (!memberError && member) {
-          memberName = member.name;
-          memberEmail = member.email;
-        }
-      }
-      if (data.project_id) {
-        const { data: project, error: projectError } = await supabase
-          .from('projects')
-          .select('name')
-          .eq('id', data.project_id)
-          .single();
-        if (!projectError && project) projectName = project.name;
-      }
-      try {
-        await fetch('https://n8nautomation.site/webhook-test/onTaskUpdatedByAdmin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            task_name: data.task_name,
-            description: data.description,
-            due_date: data.due_date,
-            assigned_date: data.created_at,
-            assigned_to: memberName,
-            assigned_to_email: memberEmail,
-            project_name: projectName,
-            updated_by: user.name || '',
-            updated_status: updates.status,
-            previous_status: prevStatus,
-            status_updated_date: new Date().toISOString(),
-          }),
-        });
-      } catch (err) {
-        webhookError = err;
-        console.error('Failed to send admin automation update webhook:', err);
-      }
-      // --- Always attempt to send notification to member on status update ---
-      try {
-        let emoji = '';
-        let statusText = '';
-        if (updates.status === 'completed') {
-          emoji = '🎉';
-          statusText = 'completed';
-        } else if (updates.status === 'in_progress') {
-          emoji = '⏳';
-          statusText = 'in progress';
-        } else if (updates.status === 'blocked') {
-          emoji = '🛑';
-          statusText = 'blocked';
-        } else if (updates.status === 'pending') {
-          emoji = '⏳';
-          statusText = 'pending';
-        } else if (updates.status === 'cancelled') {
-          emoji = '🚫';
-          statusText = 'cancelled';
-        }
-        // Always insert notification for member on status update
-        await supabase.from('notifications').insert([
-          {
-            user_id: data.user_id,
-            from_id: user.id,
-            to_id: data.user_id,
-            title: `${emoji} Task Status Updated`,
-            message: `Status for task "${data.task_name}" changed to ${statusText}.`,
-            type: 'task_status_updated',
-            related_id: data.id,
-            related_type: 'task',
-            created_at: new Date().toISOString(),
-          },
-        ]);
-        // --- NEW: Also notify all admins ---
-        let memberName = '';
-        if (data.user_id) {
-          const { data: member, error: memberError } = await supabase
-            .from('members')
-            .select('name')
-            .eq('id', data.user_id)
-            .single();
-          if (!memberError && member) {
-            memberName = member.name;
-          }
-        }
-        if (user && user.id) {
-          const { data: admins } = await supabase
-            .from('admins')
-            .select('id, name')
-            .neq('email', '')
-            .neq('id', user.id);
-          if (admins && admins.length > 0) {
-            await Promise.all(admins.map((admin: any) =>
-              supabase.from('notifications').insert([
-                {
-                  user_id: admin.id,
-                  from_id: user.id,
-                  to_id: admin.id,
-                  title: `${emoji} Task Status Updated for Member`,
-                  message: `Task "${data.task_name}" for member ${memberName} changed to ${statusText}.`,
-                  type: 'task_status_updated',
-                  related_id: data.id,
-                  related_type: 'task',
-                  created_at: new Date().toISOString(),
-                },
-              ])
-            ));
-          }
-        }
-      } catch (notifError) {
-        console.error('Failed to send notification to member/admin:', notifError);
-      }
-      // --- END NEW ---
-    }
-    if (updates.status && prevStatus && updates.status !== prevStatus) {
-      let emoji = '';
-      let statusText = '';
       if (updates.status === 'completed') {
         emoji = '🎉';
         statusText = 'completed';
@@ -423,8 +241,12 @@ export const useTasks = () => {
         emoji = '⏳';
         statusText = 'pending';
       }
-
-      // Get project name for context
+      toast(`${emoji} Task Status Updated`, {
+        description: `Status for task "${data.task_name}" changed to ${statusText}.`,
+        style: { background: '#eab308', color: 'white' },
+        duration: 4500,
+      });
+      // --- Notification logic (like addTask) ---
       let projectName = '';
       if (data.project_id) {
         const { data: project } = await supabase
@@ -432,15 +254,11 @@ export const useTasks = () => {
           .select('name')
           .eq('id', data.project_id)
           .single();
-        if (project) {
-          projectName = project.name;
-        }
+        if (project) projectName = project.name;
       }
-
-      // Only send one notification based on who made the update
       try {
-        if (user?.role === 'admin') {
-          // Admin updates a task: notify only the member
+        if (user.role === 'admin') {
+          // Notify only the member
           if (data.user_id) {
             await supabase.from('notifications').insert([
               {
@@ -456,13 +274,12 @@ export const useTasks = () => {
               },
             ]);
           }
-        } else if (user?.role === 'member') {
-          // Member updates a task: notify only the admins
+        } else if (user.role === 'member') {
+          // Notify all admins
           const { data: admins } = await supabase
             .from('admins')
             .select('id, name')
             .eq('is_active', true);
-
           if (admins && admins.length > 0) {
             await Promise.all(admins.map((admin: any) =>
               supabase.from('notifications').insert([
@@ -485,27 +302,31 @@ export const useTasks = () => {
         console.error('Failed to send notification for status update:', notifError);
       }
     }
-
-    // Remove this section as we're now handling notifications above
-    // --- NEW: Notify all admins and the member (from/to logic) ---
+    // Show toast for progress update
+    if (updates.progress !== undefined) {
+      toast('📈 Task Progress Updated', {
+        description: `Progress for task "${data.task_name}" is now ${data.progress}%`,
+        style: { background: '#eab308', color: 'black' },
+        duration: 3000,
+      });
+    }
+    // --- Notify for other updates (not status/progress) ---
     try {
-      // Handle any other non-status updates if needed
-      if (!updates.status && user?.role === 'member') {
+      if (!updates.status && user.role === 'member') {
         // Member updates other task details: notify admins
         const { data: admins } = await supabase
           .from('admins')
           .select('id, name')
           .eq('is_active', true);
-
         if (admins && admins.length > 0) {
           await Promise.all(admins.map((admin: any) =>
             supabase.from('notifications').insert([
               {
                 user_id: admin.id,
-                from_id: user?.id,
+                from_id: user.id,
                 to_id: admin.id,
                 title: '📝 Task Updated',
-                message: `${user?.name || 'A member'} updated task: ${data.task_name}`,
+                message: `${user.name || 'A member'} updated task: ${data.task_name}`,
                 type: 'task_updated',
                 related_id: data.id,
                 related_type: 'task',
@@ -553,110 +374,56 @@ export const useTasks = () => {
       style: { background: '#2563eb', color: 'white' },
       duration: 4000,
     });
-    // Send notification to the other party
+    // --- Notification logic (like addTask) ---
+    let projectName = '';
+    if (taskToDelete.project_id) {
+      const { data: project } = await supabase
+        .from('projects')
+        .select('name')
+        .eq('id', taskToDelete.project_id)
+        .single();
+      if (project) projectName = project.name;
+    }
     try {
-      // Fetch valid member and admin user_ids (auth.users.id)
-      const { data: members } = await supabase.from('members').select('id, user_id');
-      const { data: admins } = await supabase.from('admins').select('id, user_id');
-      const memberIdToUserId = Object.fromEntries((members || []).map(m => [m.id, m.user_id]));
-      const adminIdToUserId = Object.fromEntries((admins || []).map(a => [a.id, a.user_id]));
-      const validMemberUserIds = (members || []).map(m => m.user_id).filter(Boolean);
-      const validAdminUserIds = (admins || []).map(a => a.user_id).filter(Boolean);
-
-      function isValidId(id: any, list: string[]) {
-        return typeof id === 'string' && id.length === 36 && list.includes(id);
-      }
-
-      if (user?.role === 'admin') {
-        // Notify member
-        const memberUserId = memberIdToUserId[taskToDelete.user_id];
-        // Always insert notification, even if memberUserId is null
-        console.log('[NOTIF] Inserting notification for member (user_id may be null):', memberUserId);
-        const { error: notifError1 } = await supabase.from('notifications').insert([
-          {
-            user_id: taskToDelete.user_id, // Set to member's id so real-time works
-            from_id: adminIdToUserId[user.id] || null,
-            to_id: memberUserId || null,
-            title: '🗑️ Task Deleted by Admin',
-            message: `Admin ${user.name} deleted your task: ${taskToDelete.task_name}`,
-            type: 'task_status_updated',
-            related_id: id,
-            related_type: 'task',
-            created_at: new Date().toISOString(),
-          },
-        ]);
-        if (notifError1) {
-          toast('❌ Notification Error', {
-            description: notifError1.message || 'Failed to notify member of task deletion.',
-            style: { background: '#ef4444', color: 'white' },
-            duration: 4000,
-          });
-        }
-        // Notify admin (self)
-        const adminUserId = adminIdToUserId[user.id];
-        console.log('[NOTIF] Inserting notification for admin (user_id may be null):', adminUserId);
-        const { error: notifError2 } = await supabase.from('notifications').insert([
-          {
-            user_id: adminUserId || null,
-            from_id: adminUserId || null,
-            to_id: adminUserId || null,
-            title: '🗑️ You deleted a member task',
-            message: `You deleted a member's task: ${taskToDelete.task_name}`,
-            type: 'task_status_updated',
-            related_id: id,
-            related_type: 'task',
-            created_at: new Date().toISOString(),
-          },
-        ]);
-        if (notifError2) {
-          toast('❌ Notification Error', {
-            description: notifError2.message || 'Failed to notify admin of task deletion.',
-            style: { background: '#ef4444', color: 'white' },
-            duration: 4000,
-          });
-        }
-      } else if (user?.role === 'member') {
-        // Notify all admins
-        const memberUserId = memberIdToUserId[user.id];
-        for (const admin of admins || []) {
-          const adminUserId = admin.user_id;
-          if (isValidId(adminUserId, validAdminUserIds)) {
-            console.log('[NOTIF] Attempting to insert for admin:', adminUserId, 'from member:', memberUserId);
-            await supabase.from('notifications').insert([
-              {
-                user_id: adminUserId,
-                from_id: memberUserId,
-                to_id: adminUserId,
-                title: '🗑️ Task Deleted',
-                message: `${user.name || 'A member'} deleted a task: ${taskToDelete.task_name}`,
-                type: 'task_status_updated',
-                related_id: id,
-                related_type: 'task',
-                created_at: new Date().toISOString(),
-              },
-            ]);
-          } else {
-            console.error('[NOTIF] Invalid admin user_id for notification:', adminUserId, 'Valid admins:', validAdminUserIds);
-          }
-        }
-        // Notify member (self)
-        if (isValidId(memberUserId, validMemberUserIds)) {
-          console.log('[NOTIF] Attempting to insert for member self:', memberUserId, 'Valid members:', validMemberUserIds);
+      if (user.role === 'admin') {
+        // Notify only the member
+        if (taskToDelete.user_id) {
           await supabase.from('notifications').insert([
             {
-              user_id: memberUserId,
-              from_id: memberUserId,
-              to_id: memberUserId,
-              title: '🗑️ You deleted a task',
-              message: `You deleted a task: ${taskToDelete.task_name}`,
+              user_id: taskToDelete.user_id,
+              from_id: user.id,
+              to_id: taskToDelete.user_id,
+              title: '🗑️ Task Deleted by Admin',
+              message: `Admin ${user.name} deleted your task${projectName ? ` in project "${projectName}"` : ''}: "${taskToDelete.task_name}"`,
               type: 'task_status_updated',
               related_id: id,
               related_type: 'task',
               created_at: new Date().toISOString(),
             },
           ]);
-        } else {
-          console.error('[NOTIF] Invalid member user_id for notification:', memberUserId, 'Valid members:', validMemberUserIds);
+        }
+      } else if (user.role === 'member') {
+        // Notify all admins
+        const { data: admins } = await supabase
+          .from('admins')
+          .select('id, name')
+          .eq('is_active', true);
+        if (admins && admins.length > 0) {
+          await Promise.all(admins.map((admin: any) =>
+            supabase.from('notifications').insert([
+              {
+                user_id: admin.id,
+                from_id: user.id,
+                to_id: admin.id,
+                title: '🗑️ Task Deleted by Member',
+                message: `${user.name || 'A member'} deleted task${projectName ? ` in project "${projectName}"` : ''}: "${taskToDelete.task_name}"`,
+                type: 'task_status_updated',
+                related_id: id,
+                related_type: 'task',
+                created_at: new Date().toISOString(),
+              },
+            ])
+          ));
         }
       }
     } catch (notifError) {
