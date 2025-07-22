@@ -75,7 +75,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     // Fetch holidays for the current cycle
     const fetchHolidays = async () => {
       const { data, error } = await supabase
-        .from('holidays')
+        .from('company_holidays')
         .select('date')
         .gte('date', '2025-01-01') // Use the same cycle as before
         .lte('date', '2026-12-31'); // Use the same cycle as before
@@ -247,14 +247,26 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
         return;
       }
       
-      // Check for any overlapping dates in the range
+      // Check for any overlapping dates in the range (excluding holidays in between)
       const fromDate = new Date(formData.from_date);
       const toDate = new Date(formData.to_date);
       for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
         const validation = isDateSelectable(dateStr, true);
-        if (!validation.valid && !validation.reason.includes('Sundays')) {
-          // Allow Sundays in range but not other invalid dates
+        
+        // For dates in between (not from/to dates), allow holidays but not existing leaves
+        const isFromOrToDate = dateStr === formData.from_date || dateStr === formData.to_date;
+        
+        if (!validation.valid) {
+          // Allow Sundays in range
+          if (validation.reason.includes('Sundays')) {
+            continue;
+          }
+          // Allow holidays in between dates, but not on from/to dates
+          if (validation.reason.includes('Company holidays') && !isFromOrToDate) {
+            continue;
+          }
+          // All other validation errors should be reported
           setError(`Date ${dateStr}: ${validation.reason}`);
           return;
         }

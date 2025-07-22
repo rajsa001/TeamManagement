@@ -95,8 +95,8 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
     // Check if this day is a holiday
     const holidayForDay = getHolidayForDate(day);
     
-    // Block if there are approved leaves for this day OR if it's a holiday
-    if (leavesForDay.some(l => l.status === 'approved') || holidayForDay) {
+    // Block if there are ANY leaves for this day (regardless of status) OR if it's a holiday
+    if (leavesForDay.length > 0 || holidayForDay) {
       return;
     }
     
@@ -221,8 +221,8 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
           // Check if this day is a holiday
           const holidayForDay = getHolidayForDate(day);
           
-          // In the calendar grid, disable if there is an approved leave for the day OR if it's a holiday
-          const isDisabled = leavesForDay.some(l => l.status === 'approved') || !!holidayForDay;
+          // In the calendar grid, disable if there is ANY leave for the day OR if it's a holiday
+          const isDisabled = leavesForDay.length > 0 || !!holidayForDay;
 
           const isToday =
             day === new Date().getDate() &&
