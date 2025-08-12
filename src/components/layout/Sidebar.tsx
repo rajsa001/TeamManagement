@@ -31,7 +31,7 @@ export const SIDEBAR_MAX_WIDTH = 256; // px (w-64)
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIsOpen, unreadNotifications }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin'; // Added isAdmin state
-  const isSuperAdmin = user?.email === 'rathorerajpal18112003@gmail.com';
+  const isSuperAdmin = user?.email === 'mmandviya93@gmail.com';
 
   const memberTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
