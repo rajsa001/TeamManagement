@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
+import { MemberDailyTasksPage } from './MemberDailyTasksPage';
 
 interface MemberDashboardProps {
   activeTab: string;
@@ -679,6 +680,10 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         )}
       </div>
     );
+  }
+
+  if (activeTab === 'daily-tasks') {
+    return <MemberDailyTasksPage />;
   }
 
   return null;

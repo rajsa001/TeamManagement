@@ -92,3 +92,30 @@ export interface LeaveFilters {
   month?: number;
   year?: number;
 }
+
+export interface DailyTask {
+  id: string;
+  user_id: string;
+  created_by: string;
+  task_name: string;
+  description?: string;
+  status: 'pending' | 'completed' | 'skipped';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  tags?: string[];
+  attachments?: any[];
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+  task_date: string;
+  user?: Member;
+  created_by_user?: Member | null;
+}
+
+export interface DailyTaskFilters {
+  status?: 'pending' | 'completed' | 'skipped';
+  member?: string;
+  date?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  search?: string;
+}

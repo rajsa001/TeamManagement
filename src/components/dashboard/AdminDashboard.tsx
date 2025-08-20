@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Modal from '../ui/Modal';
-import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { TaskFilters } from '../../types';
@@ -25,6 +25,7 @@ import { format } from 'timeago.js';
 import { toast } from 'sonner';
 import LeaveForm from './LeaveForm';
 import HolidayCalendar from './HolidayCalendar';
+import { DailyTasksPage } from './DailyTasksPage';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -2081,6 +2082,10 @@ const handleDeleteHoliday = async (holidayId: string) => {
         </Modal>
       </div>
     );
+  }
+
+  if (activeTab === 'daily-tasks') {
+    return <DailyTasksPage />;
   }
 
   return null;
