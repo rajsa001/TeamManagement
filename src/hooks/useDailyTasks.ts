@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DailyTask, DailyTaskFilters } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -8,7 +8,9 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const { user } = useAuth();
+  const subscriptionRef = useRef<any>(null);
 
   const fetchTasks = useCallback(async () => {
     if (!user) {
@@ -68,6 +70,182 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
     }
   }, [filters.status, filters.member, filters.date, filters.priority, filters.search, user?.id, user?.role]);
 
+  // Set up real-time subscription
+  useEffect(() => {
+    if (!user) return;
+
+    // Clean up existing subscription
+    if (subscriptionRef.current) {
+      subscriptionRef.current.unsubscribe();
+    }
+
+    // Create new subscription
+    subscriptionRef.current = supabase
+      .channel('daily_tasks_changes')
+      .on('presence', { event: 'sync' }, () => {
+        console.log('🟢 Real-time connection established');
+        setRealtimeConnected(true);
+      })
+      .on('presence', { event: 'join' }, () => {
+        console.log('🟢 Real-time client joined');
+      })
+      .on('presence', { event: 'leave' }, () => {
+        console.log('🔴 Real-time client left');
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'daily_tasks'
+        },
+        (payload) => {
+          console.log('🔄 Real-time change received:', {
+            eventType: payload.eventType,
+            table: payload.table,
+            schema: payload.schema,
+            new: payload.new,
+            old: payload.old
+          });
+
+          // Show toast for real-time updates (only for updates, not for user's own actions)
+          if (payload.eventType === 'UPDATE' && payload.new?.updated_by !== user?.id) {
+            const taskName = payload.new?.task_name || 'Task';
+            toast.info(`🔄 ${taskName} was updated in real-time`, {
+              position: "top-right",
+              autoClose: 3000,
+            });
+          } else if (payload.eventType === 'INSERT' && payload.new?.created_by !== user?.id) {
+            const taskName = payload.new?.task_name || 'Task';
+            toast.info(`🆕 New task "${taskName}" was created`, {
+              position: "top-right",
+              autoClose: 3000,
+            });
+          } else if (payload.eventType === 'DELETE' && payload.old?.created_by !== user?.id) {
+            const taskName = payload.old?.task_name || 'Task';
+            toast.info(`🗑️ Task "${taskName}" was deleted`, {
+              position: "top-right",
+              autoClose: 3000,
+            });
+          }
+          
+          // Handle different types of changes
+          if (payload.eventType === 'INSERT') {
+            // Fetch complete task data with user relationship
+            const fetchCompleteTask = async () => {
+              const { data: completeTask, error } = await supabase
+                .from('daily_tasks')
+                .select(`
+                  *,
+                  user:members(id, name, email, avatar_url)
+                `)
+                .eq('id', payload.new.id)
+                .single();
+              
+              if (error || !completeTask) {
+                console.error('Error fetching complete task data:', error);
+                return;
+              }
+              
+              const newTask = completeTask as DailyTask;
+            setTasks(prevTasks => {
+              // Check if task already exists to avoid duplicates
+              if (prevTasks.find(task => task.id === newTask.id)) {
+                return prevTasks;
+              }
+              
+              // Apply filters to new task
+              let shouldInclude = true;
+              if (filters.status && newTask.status !== filters.status) shouldInclude = false;
+              if (filters.member && newTask.user_id !== filters.member) shouldInclude = false;
+              if (filters.date && newTask.task_date !== filters.date) shouldInclude = false;
+              if (filters.priority && newTask.priority !== filters.priority) shouldInclude = false;
+              if (filters.search) {
+                const searchLower = filters.search.toLowerCase();
+                const matchesSearch = 
+                  newTask.task_name.toLowerCase().includes(searchLower) ||
+                  (newTask.description && newTask.description.toLowerCase().includes(searchLower));
+                if (!matchesSearch) shouldInclude = false;
+              }
+              
+              // If not admin, only include user's own tasks
+              if (user.role !== 'admin' && newTask.user_id !== user.id) shouldInclude = false;
+              
+                             if (shouldInclude) {
+                 return [newTask, ...prevTasks];
+               }
+               return prevTasks;
+             });
+            };
+            
+            fetchCompleteTask();
+          } else if (payload.eventType === 'UPDATE') {
+            // Fetch complete task data with user relationship
+            const fetchCompleteTask = async () => {
+              const { data: completeTask, error } = await supabase
+                .from('daily_tasks')
+                .select(`
+                  *,
+                  user:members(id, name, email, avatar_url)
+                `)
+                .eq('id', payload.new.id)
+                .single();
+              
+              if (error || !completeTask) {
+                console.error('Error fetching complete task data:', error);
+                return;
+              }
+              
+              const updatedTask = completeTask as DailyTask;
+            setTasks(prevTasks => {
+              const taskIndex = prevTasks.findIndex(task => task.id === updatedTask.id);
+              if (taskIndex === -1) return prevTasks;
+              
+              // Check if updated task still matches filters
+              let shouldInclude = true;
+              if (filters.status && updatedTask.status !== filters.status) shouldInclude = false;
+              if (filters.member && updatedTask.user_id !== filters.member) shouldInclude = false;
+              if (filters.date && updatedTask.task_date !== filters.date) shouldInclude = false;
+              if (filters.priority && updatedTask.priority !== filters.priority) shouldInclude = false;
+              if (filters.search) {
+                const searchLower = filters.search.toLowerCase();
+                const matchesSearch = 
+                  updatedTask.task_name.toLowerCase().includes(searchLower) ||
+                  (updatedTask.description && updatedTask.description.toLowerCase().includes(searchLower));
+                if (!matchesSearch) shouldInclude = false;
+              }
+              
+              // If not admin, only include user's own tasks
+              if (user.role !== 'admin' && updatedTask.user_id !== user.id) shouldInclude = false;
+              
+              if (shouldInclude) {
+                const newTasks = [...prevTasks];
+                newTasks[taskIndex] = updatedTask;
+                return newTasks;
+                             } else {
+                 // Remove task if it no longer matches filters
+                 return prevTasks.filter(task => task.id !== updatedTask.id);
+               }
+             });
+            };
+            
+            fetchCompleteTask();
+          } else if (payload.eventType === 'DELETE') {
+            const deletedTaskId = payload.old.id;
+            setTasks(prevTasks => prevTasks.filter(task => task.id !== deletedTaskId));
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup function
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+      }
+    };
+  }, [user?.id, user?.role, filters.status, filters.member, filters.date, filters.priority, filters.search]);
+
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
@@ -109,7 +287,6 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       }
 
       if (data) {
-        await fetchTasks();
         toast.success(`📝 Daily Task Added: ${data.task_name}`, {
           position: "top-right",
           autoClose: 4500,
@@ -149,7 +326,6 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       }
 
       if (data) {
-        await fetchTasks();
         toast.success(`✅ Daily Task Updated: ${data.task_name}`, {
           position: "top-right",
           autoClose: 3000,
@@ -189,7 +365,6 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
         return;
       }
 
-      await fetchTasks();
       toast.success(`🗑️ Daily Task Deleted: ${taskToDelete.task_name}`, {
         position: "top-right",
         autoClose: 4000,
@@ -225,6 +400,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
     tasks,
     loading,
     error,
+    realtimeConnected,
     fetchTasks,
     createTask,
     updateTask,

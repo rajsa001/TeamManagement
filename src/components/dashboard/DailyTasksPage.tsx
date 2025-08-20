@@ -20,6 +20,7 @@ export const DailyTasksPage: React.FC = () => {
     tasks,
     loading,
     error,
+    realtimeConnected,
     createTask,
     updateTask,
     deleteTask,
@@ -120,11 +121,17 @@ export const DailyTasksPage: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Daily Tasks</h1>
-          <p className="text-gray-600">Manage daily tasks for team members</p>
-        </div>
+             <div className="flex justify-between items-center mb-6">
+         <div>
+           <h1 className="text-2xl font-bold text-gray-900">Daily Tasks</h1>
+           <p className="text-gray-600">Manage daily tasks for team members</p>
+           <div className="flex items-center mt-1">
+             <div className={`w-2 h-2 rounded-full mr-2 ${realtimeConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+             <span className={`text-xs ${realtimeConnected ? 'text-green-600' : 'text-gray-500'}`}>
+               {realtimeConnected ? 'Real-time updates enabled' : 'Connecting...'}
+             </span>
+           </div>
+         </div>
         <Button
           onClick={() => setIsFormOpen(true)}
           className="bg-blue-500 hover:bg-blue-600 text-white"
