@@ -167,10 +167,10 @@ const handleDeleteHoliday = async (holidayId: string) => {
   useEffect(() => {
     if (activeTab === 'leaves') {
       const fetchBalances = async () => {
-        const res = await supabase
-          .from('member_leave_balances')
-          .select('*');
-        setLeaveBalances(res.data || []);
+        const { data, error } = await supabase.from('member_leave_balances').select('*');
+        if (!error) {
+          setLeaveBalances(data || []);
+        }
       };
       fetchBalances();
     }
@@ -1233,6 +1233,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
             </div>
           )}
         </div>
+
         {/* Member Balances & History Section */}
         <div>
           <h2 className="text-lg font-semibold text-gray-800 mb-2 mt-8">Member Leave Balances & History</h2>

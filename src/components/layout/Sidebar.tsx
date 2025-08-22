@@ -49,20 +49,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
 
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'tasks', label: 'All Tasks', icon: CheckSquare },
-    { id: 'my-tasks', label: 'My Tasks', icon: CheckSquare },
+    { id: 'tasks', label: 'All Tasks', icon: ClipboardList },
+    { id: 'my-tasks', label: 'My Tasks', icon: Target },
     { id: 'daily-tasks', label: 'Daily Tasks', icon: CheckSquare },
     { id: 'leaves', label: 'All Leaves', icon: CalendarDays },
     { id: 'holidays', label: 'Company Holidays', icon: CalendarRange },
     { id: 'team', label: 'Team', icon: Users },
-    { id: 'reports', label: 'Reports', icon: BarChart2 }, // Use BarChart2 for Reports
+    { id: 'reports', label: 'Reports', icon: BarChart2 },
     { id: 'projects', label: 'Projects', icon: Folder },
-    { id: 'notifications', label: 'Notifications', icon: Bell }, // Notifications tab for admin
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'profile', label: 'Profile', icon: User },
-    { id: 'admin-management', label: 'Admin Management', icon: UserPlus },
+    { id: 'admin-management', label: 'Admin Management', icon: Shield },
   ];
   if (isSuperAdmin) {
-    adminTabs.splice(3, 0, { id: 'leave-defaults', label: 'Leave Management', icon: CalendarDays });
+    adminTabs.splice(3, 0, { id: 'leave-defaults', label: 'Leave Management', icon: Settings });
   }
 
   const tabs = user?.role === 'admin' ? adminTabs : memberTabs;
