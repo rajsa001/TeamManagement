@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DailyTask, DailyTaskFilters } from '../types';
+import { DailyTask, DailyTaskFilters, Member, Admin } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { authService } from '../services/auth';
 import { toast } from 'react-toastify';
 
 export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
@@ -24,10 +25,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
     try {
       let query = supabase
         .from('daily_tasks')
-        .select(`
-          *,
-          user:members(id, name, email, avatar_url)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       // Apply filters
@@ -59,7 +57,9 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
         setError(error.message || 'Failed to fetch daily tasks');
         setTasks([]);
       } else {
-        setTasks(data || []);
+        // Fetch user information for all tasks
+        const tasksWithUsers = await fetchUserDataForTasks(data || []);
+        setTasks(tasksWithUsers);
       }
     } catch (err) {
       console.error('Error in fetchTasks:', err);
@@ -69,6 +69,58 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       setLoading(false);
     }
   }, [filters.status, filters.member, filters.date, filters.priority, filters.search, user?.id, user?.role]);
+
+  // Function to fetch user data for tasks
+  const fetchUserDataForTasks = async (tasks: any[]): Promise<DailyTask[]> => {
+    if (!tasks.length) return [];
+    
+    try {
+      // Get unique user IDs from tasks
+      const userIds = [...new Set(tasks.map(task => task.user_id))];
+      
+      // Fetch both members and admins
+      const [membersData, adminsData] = await Promise.all([
+        supabase
+          .from('members')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds)
+          .eq('is_active', true),
+        supabase
+          .from('admins')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds)
+          .eq('is_active', true)
+      ]);
+
+      // Combine members and admins into a single map
+      const userMap = new Map();
+      
+      if (membersData.data) {
+        membersData.data.forEach(member => {
+          userMap.set(member.id, { ...member, role: 'member' });
+        });
+      }
+      
+      if (adminsData.data) {
+        adminsData.data.forEach(admin => {
+          userMap.set(admin.id, { ...admin, role: 'admin' });
+        });
+      }
+
+      // Attach user data to tasks
+      return tasks.map(task => ({
+        ...task,
+        user: userMap.get(task.user_id) || null
+      }));
+    } catch (error) {
+      console.error('Error fetching user data for tasks:', error);
+      // Return tasks without user data if there's an error
+      return tasks.map(task => ({
+        ...task,
+        user: null
+      }));
+    }
+  };
 
   // Set up real-time subscription
   useEffect(() => {
@@ -135,10 +187,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
             const fetchCompleteTask = async () => {
               const { data: completeTask, error } = await supabase
                 .from('daily_tasks')
-                .select(`
-                  *,
-                  user:members(id, name, email, avatar_url)
-                `)
+                .select('*')
                 .eq('id', payload.new.id)
                 .single();
               
@@ -147,7 +196,9 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
                 return;
               }
               
-              const newTask = completeTask as DailyTask;
+              // Fetch user data for the new task
+              const tasksWithUsers = await fetchUserDataForTasks([completeTask]);
+              const newTask = tasksWithUsers[0] as DailyTask;
             setTasks(prevTasks => {
               // Check if task already exists to avoid duplicates
               if (prevTasks.find(task => task.id === newTask.id)) {
@@ -184,10 +235,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
             const fetchCompleteTask = async () => {
               const { data: completeTask, error } = await supabase
                 .from('daily_tasks')
-                .select(`
-                  *,
-                  user:members(id, name, email, avatar_url)
-                `)
+                .select('*')
                 .eq('id', payload.new.id)
                 .single();
               
@@ -196,7 +244,9 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
                 return;
               }
               
-              const updatedTask = completeTask as DailyTask;
+              // Fetch user data for the updated task
+              const tasksWithUsers = await fetchUserDataForTasks([completeTask]);
+              const updatedTask = tasksWithUsers[0] as DailyTask;
             setTasks(prevTasks => {
               const taskIndex = prevTasks.findIndex(task => task.id === updatedTask.id);
               if (taskIndex === -1) return prevTasks;
@@ -274,10 +324,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       const { data, error } = await supabase
         .from('daily_tasks')
         .insert([taskToInsert])
-        .select(`
-          *,
-          user:members(id, name, email, avatar_url)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -287,11 +334,15 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       }
 
       if (data) {
+        // Fetch user data for the new task
+        const tasksWithUsers = await fetchUserDataForTasks([data]);
+        const taskWithUser = tasksWithUsers[0];
+        
         toast.success(`📝 Daily Task Added: ${data.task_name}`, {
           position: "top-right",
           autoClose: 4500,
         });
-        return data;
+        return taskWithUser;
       }
     } catch (err) {
       console.error('Error in createTask:', err);
@@ -313,10 +364,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
         .from('daily_tasks')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id)
-        .select(`
-          *,
-          user:members(id, name, email, avatar_url)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -326,11 +374,15 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       }
 
       if (data) {
+        // Fetch user data for the updated task
+        const tasksWithUsers = await fetchUserDataForTasks([data]);
+        const taskWithUser = tasksWithUsers[0];
+        
         toast.success(`✅ Daily Task Updated: ${data.task_name}`, {
           position: "top-right",
           autoClose: 3000,
         });
-        return data;
+        return taskWithUser;
       }
     } catch (err) {
       console.error('Error in updateTask:', err);

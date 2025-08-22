@@ -16,7 +16,7 @@ export const useTasks = () => {
     setLoading(true);
     let query = supabase
       .from('tasks')
-      .select('*, project:projects(*), user:members!user_id(*)');
+      .select('*, project:projects(*)');
     if (user?.role !== 'admin') {
       query = query.eq('user_id', user?.id);
     }
@@ -25,7 +25,32 @@ export const useTasks = () => {
       console.error('Error fetching tasks:', error);
       setTasks([]);
     } else {
-      setTasks(data || []);
+      // Fetch user details for each task (could be member or admin)
+      const tasksWithUsers = await Promise.all((data || []).map(async (task) => {
+        // Try to find user in members table first
+        let { data: memberUser } = await supabase
+          .from('members')
+          .select('id, name, email')
+          .eq('id', task.user_id)
+          .single();
+        
+        // If not found in members, try admins table
+        if (!memberUser) {
+          let { data: adminUser } = await supabase
+            .from('admins')
+            .select('id, name, email')
+            .eq('id', task.user_id)
+            .single();
+          memberUser = adminUser;
+        }
+        
+        return {
+          ...task,
+          user: memberUser
+        };
+      }));
+      
+      setTasks(tasksWithUsers);
     }
     setLoading(false);
   };
@@ -451,8 +476,9 @@ export const useTasks = () => {
     }
   };
 
-  const filterTasks = (filters: TaskFilters) => {
-    return tasks.filter(task => {
+  const filterTasks = (filters: TaskFilters, taskList?: Task[]) => {
+    const tasksToFilter = taskList || tasks;
+    return tasksToFilter.filter(task => {
       // Check both member and assignedTo filters for backward compatibility
       if (filters.member && task.user_id !== filters.member) return false;
       if (filters.assignedTo && task.user_id !== filters.assignedTo) return false;

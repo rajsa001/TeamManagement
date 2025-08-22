@@ -15,6 +15,9 @@ interface TaskCardProps {
   onUpdate?: (id: string, updates: Partial<Task>) => void;
   showUser?: boolean;
   section?: 'completed' | 'today' | 'upcoming' | 'blocked'; // NEW
+  members?: { id: string; name: string }[];
+  admins?: { id: string; name: string }[];
+  projects?: { id: string; name: string }[];
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
@@ -23,7 +26,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onStatusChange, 
   onUpdate,
   showUser = false,
-  section // NEW
+  section, // NEW
+  members = [],
+  admins = [],
+  projects = []
 }) => {
   const { user } = useAuth();
   // Helper to check if a date is before today
@@ -41,6 +47,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
     description: task.description,
     priority: task.priority as Task['priority'],
     status: task.status as Task['status'],
+    user_id: task.user_id,
+    project_id: task.project_id || '',
   });
   const [editAttachments, setEditAttachments] = useState<TaskAttachment[]>(task.attachments || []);
   const [urlInput, setUrlInput] = useState('');
@@ -455,6 +463,54 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 <option value="completed">Completed</option>
               </select>
             </div>
+
+                         {/* Assigned To field - only for admins */}
+             {user?.role === 'admin' && (
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+                 <select
+                   name="user_id"
+                   value={editData.user_id}
+                   onChange={handleEditChange}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   required
+                 >
+                   <option value="">Select Member or Admin</option>
+                   {members.length > 0 && (
+                     <optgroup label="Members">
+                       {members.map(member => (
+                         <option key={member.id} value={member.id}>{member.name}</option>
+                       ))}
+                     </optgroup>
+                   )}
+                   {admins.length > 0 && (
+                     <optgroup label="Admins">
+                       {admins.map(admin => (
+                         <option key={admin.id} value={admin.id}>{admin.name} (Admin)</option>
+                       ))}
+                     </optgroup>
+                   )}
+                 </select>
+               </div>
+             )}
+
+            {/* Project field - only for admins */}
+            {user?.role === 'admin' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                <select
+                  name="project_id"
+                  value={editData.project_id}
+                  onChange={handleEditChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">No Project</option>
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Attachments Section */}
             <div>

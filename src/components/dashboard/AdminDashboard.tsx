@@ -118,6 +118,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
   }
 };
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [admins, setAdmins] = useState<{ id: string; name: string }[]>([]);
   const [openSections, setOpenSections] = useState({
     recentlyCompleted: false,
     dueToday: false,
@@ -203,12 +204,18 @@ const handleDeleteHoliday = async (holidayId: string) => {
 
   useEffect(() => {
     let isMounted = true;
-    const fetchMembers = async () => {
-      const data = await authService.getMembers();
-      if (isMounted) setMembers(data.map(m => ({ id: m.id, name: m.name })));
+    const fetchMembersAndAdmins = async () => {
+      const [membersData, adminsData] = await Promise.all([
+        authService.getMembers(),
+        authService.getAdmins()
+      ]);
+      if (isMounted) {
+        setMembers(membersData.map(m => ({ id: m.id, name: m.name })));
+        setAdmins(adminsData.map(a => ({ id: a.id, name: a.name })));
+      }
     };
-    fetchMembers();
-    const interval = setInterval(fetchMembers, 5000); // Poll every 5 seconds
+    fetchMembersAndAdmins();
+    const interval = setInterval(fetchMembersAndAdmins, 5000); // Poll every 5 seconds
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -996,6 +1003,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
           onFiltersChange={setTaskFilters}
           showMemberFilter={true}
           members={members}
+          admins={admins}
           projects={projects.map(p => ({ id: p.id, name: p.name }))}
         />
 
@@ -1019,7 +1027,74 @@ const handleDeleteHoliday = async (holidayId: string) => {
                 onStatusChange={handleStatusChange}
                 showUser={true}
                 onUpdate={handleTaskUpdate}
+                members={members}
+                admins={admins}
+                projects={projects.map(p => ({ id: p.id, name: p.name }))}
               />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <TaskForm
+          isOpen={isTaskFormOpen}
+          onClose={() => setIsTaskFormOpen(false)}
+          onSubmit={handleAddTask}
+        />
+      </div>
+    );
+  }
+
+  if (activeTab === 'my-tasks') {
+    // Filter tasks to show only tasks assigned to the current admin
+    const myTasks = tasks.filter(task => task.user_id === user?.id);
+    const filteredMyTasks = filterTasks(taskFilters, myTasks);
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">My Tasks</h1>
+          <Button
+            icon={Plus}
+            onClick={() => setIsTaskFormOpen(true)}
+          >
+            Add Task
+          </Button>
+        </div>
+
+                 <TaskFiltersComponent
+           filters={taskFilters}
+           onFiltersChange={setTaskFilters}
+           showMemberFilter={false}
+           members={members}
+           admins={admins}
+           projects={projects.map(p => ({ id: p.id, name: p.name }))}
+         />
+
+        {tasksError && (
+          <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">
+            {tasksError}
+          </div>
+        )}
+
+        {tasksLoading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {filteredMyTasks.map(task => (
+              <div key={task.id} className="flex h-[28rem]">
+                <TaskCard
+                  task={task}
+                  onDelete={deleteTask}
+                  onStatusChange={handleStatusChange}
+                  showUser={false}
+                  onUpdate={handleTaskUpdate}
+                  members={members}
+                  admins={admins}
+                  projects={projects.map(p => ({ id: p.id, name: p.name }))}
+                />
               </div>
             ))}
           </div>
@@ -1252,6 +1327,11 @@ const handleDeleteHoliday = async (holidayId: string) => {
                               <div>
                                 <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${lv.from_date} to ${lv.to_date}` : lv.leave_date}
                                 <span className="ml-2 text-xs">({lv.status})</span>
+                                {lv.approved_by && (lv.status === 'approved' || lv.status === 'rejected') && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {lv.status === 'approved' ? 'Approved' : 'Rejected'} by: {admins.find(a => a.id === lv.approved_by)?.name || 'Unknown Admin'}
+                                  </div>
+                                )}
                               </div>
                               <div className="text-xs text-gray-500">Reason: {lv.reason}</div>
                               <Button variant="outline" size="sm" icon={Pencil} onClick={() => { setEditLeave(lv); setEditFormOpen(true); }}>Edit</Button>

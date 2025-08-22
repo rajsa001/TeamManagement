@@ -10,7 +10,11 @@ import {
   User,
   BarChart2,
   Bell,
-  CalendarRange
+  CalendarRange,
+  ClipboardList,
+  Target,
+  Settings,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavLink } from 'react-router-dom'; // Added for NavLink
@@ -46,6 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tasks', label: 'All Tasks', icon: CheckSquare },
+    { id: 'my-tasks', label: 'My Tasks', icon: CheckSquare },
     { id: 'daily-tasks', label: 'Daily Tasks', icon: CheckSquare },
     { id: 'leaves', label: 'All Leaves', icon: CalendarDays },
     { id: 'holidays', label: 'Company Holidays', icon: CalendarRange },
@@ -74,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
       onMouseEnter={() => setIsOpen(true)}
       onMouseLeave={() => setIsOpen(false)}
     >
-      <nav className={`mt-8 px-2 transition-all duration-500 ease-in-out`}>
+      <nav className={`mt-8 px-2 transition-all duration-500 ease-in-out overflow-y-auto h-[calc(100vh-4rem)] custom-scrollbar`}>
         <ul className="space-y-2">
           {tabs.map((tab, idx) => {
             const Icon = tab.icon;

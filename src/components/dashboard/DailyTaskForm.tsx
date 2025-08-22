@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DailyTask, Member, TaskAttachment } from '../../types';
+import { DailyTask, Member, Admin, TaskAttachment } from '../../types';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { fileUploadService } from '../../services/fileUpload';
+import { authService } from '../../services/auth';
 import { Paperclip, X, Link, File } from 'lucide-react';
 
 interface DailyTaskFormProps {
@@ -38,6 +39,9 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   const [urlInput, setUrlInput] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [admins, setAdmins] = useState<Admin[]>([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
+  const [adminsError, setAdminsError] = useState('');
 
   useEffect(() => {
     if (task) {
@@ -62,6 +66,27 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
       setAttachments([]);
     }
   }, [task, currentUserId, isAdmin, members]);
+
+  // Fetch admins when component mounts or when isAdmin changes
+  useEffect(() => {
+    if (isAdmin) {
+      fetchAdmins();
+    }
+  }, [isAdmin]);
+
+  const fetchAdmins = async () => {
+    setAdminsLoading(true);
+    setAdminsError('');
+    try {
+      const adminsData = await authService.getAdmins();
+      setAdmins(adminsData);
+    } catch (error) {
+      console.error('Error fetching admins:', error);
+      setAdminsError('Failed to fetch admins');
+    } finally {
+      setAdminsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,24 +238,42 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         {isAdmin && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Assign to Member
+              Assign to Member or Admin
             </label>
-            <select
-              value={formData.user_id}
-              onChange={(e) => setFormData(prev => ({ ...prev, user_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={members.length === 0}
-            >
-              {members.length === 0 ? (
-                <option value="">Loading members...</option>
-              ) : (
-                members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                  </option>
-                ))
-              )}
-            </select>
+            {adminsLoading ? (
+              <div className="text-sm text-gray-500">Loading members and admins...</div>
+            ) : adminsError ? (
+              <div className="text-sm text-red-500">{adminsError}</div>
+            ) : (members.length === 0 && admins.length === 0) ? (
+              <div className="text-sm text-gray-500">No members or admins found.</div>
+            ) : (
+              <select
+                value={formData.user_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, user_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select Member or Admin</option>
+                {members.length > 0 && (
+                  <optgroup label="Members">
+                    {members.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name} ({member.email})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {admins.length > 0 && (
+                  <optgroup label="Admins">
+                    {admins.map((admin) => (
+                      <option key={admin.id} value={admin.id}>
+                        {admin.name} ({admin.email}) - Admin
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            )}
           </div>
         )}
 
@@ -252,13 +295,16 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Task Date
+            Task Date (Today Only)
           </label>
           <input
             type="date"
             value={formData.task_date}
             onChange={(e) => setFormData(prev => ({ ...prev, task_date: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            min={new Date().toISOString().split('T')[0]}
+            max={new Date().toISOString().split('T')[0]}
+            required
           />
         </div>
 

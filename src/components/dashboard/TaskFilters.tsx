@@ -8,6 +8,7 @@ interface TaskFiltersProps {
   onFiltersChange: (filters: TaskFilters) => void;
   showMemberFilter?: boolean;
   members?: { id: string; name: string }[];
+  admins?: { id: string; name: string }[];
   projects?: { id: string; name: string }[];
 }
 
@@ -16,6 +17,7 @@ const TaskFiltersComponent: React.FC<TaskFiltersProps> = ({
   onFiltersChange, 
   showMemberFilter = false,
   members = [],
+  admins = [],
   projects = [],
 }) => {
   const handleFilterChange = (key: keyof TaskFilters, value: string) => {
@@ -54,9 +56,20 @@ const TaskFiltersComponent: React.FC<TaskFiltersProps> = ({
             className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All</option>
-            {members.map(member => (
-              <option key={member.id} value={member.id}>{member.name}</option>
-            ))}
+            {members.length > 0 && (
+              <optgroup label="Members">
+                {members.map(member => (
+                  <option key={member.id} value={member.id}>{member.name}</option>
+                ))}
+              </optgroup>
+            )}
+            {admins.length > 0 && (
+              <optgroup label="Admins">
+                {admins.map(admin => (
+                  <option key={admin.id} value={admin.id}>{admin.name} (Admin)</option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
       )}

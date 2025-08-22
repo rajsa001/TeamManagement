@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { DailyTask, Member, DailyTaskFilters } from '../../types';
+import { DailyTask, Member, Admin, DailyTaskFilters } from '../../types';
 import { useDailyTasks } from '../../hooks/useDailyTasks';
 import { DailyTaskCard } from './DailyTaskCard';
 import { DailyTaskForm } from './DailyTaskForm';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { supabase } from '../../lib/supabase';
+import { authService } from '../../services/auth';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const DailyTasksPage: React.FC = () => {
   const { user } = useAuth();
   const [filters, setFilters] = useState<DailyTaskFilters>({});
   const [members, setMembers] = useState<Member[]>([]);
+  const [admins, setAdmins] = useState<Admin[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -30,21 +32,25 @@ export const DailyTasksPage: React.FC = () => {
   } = useDailyTasks({ ...filters, date: selectedDate });
 
   useEffect(() => {
-    fetchMembers();
+    fetchMembersAndAdmins();
   }, []);
 
-  const fetchMembers = async () => {
+  const fetchMembersAndAdmins = async () => {
     try {
-      const { data, error } = await supabase
-        .from('members')
-        .select('id, name, email')
-        .eq('is_active', true)
-        .order('name');
+      const [membersData, adminsData] = await Promise.all([
+        supabase
+          .from('members')
+          .select('id, name, email')
+          .eq('is_active', true)
+          .order('name'),
+        authService.getAdmins()
+      ]);
 
-      if (error) throw error;
-      setMembers(data || []);
+      if (membersData.error) throw membersData.error;
+      setMembers(membersData.data || []);
+      setAdmins(adminsData);
     } catch (error) {
-      console.error('Error fetching members:', error);
+      console.error('Error fetching members and admins:', error);
     }
   };
 
@@ -194,18 +200,31 @@ export const DailyTasksPage: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Member</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Member or Admin</label>
             <select
               value={filters.member || ''}
               onChange={(e) => setFilters(prev => ({ ...prev, member: e.target.value || undefined }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Members</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name}
-                </option>
-              ))}
+              <option value="">All Members & Admins</option>
+              {members.length > 0 && (
+                <optgroup label="Members">
+                  {members.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {admins.length > 0 && (
+                <optgroup label="Admins">
+                  {admins.map((admin) => (
+                    <option key={admin.id} value={admin.id}>
+                      {admin.name} (Admin)
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <div>

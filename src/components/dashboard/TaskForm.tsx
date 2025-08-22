@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Task, Member, TaskAttachment } from '../../types';
+import { Task, Member, Admin, TaskAttachment } from '../../types';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { authService } from '../../services/auth';
@@ -32,6 +32,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
   const [showUrlInput, setShowUrlInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [admins, setAdmins] = useState<Admin[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState('');
   const { projects, loading: projectsLoading } = useProjects();
@@ -40,18 +41,26 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
     if (user?.role === 'admin') {
       setMembersLoading(true);
       setMembersError('');
-      authService.getMembers()
-        .then(data => {
-          setMembers(data);
+      
+      // Fetch both members and admins
+      Promise.all([
+        authService.getMembers(),
+        authService.getAdmins()
+      ])
+        .then(([membersData, adminsData]) => {
+          setMembers(membersData);
+          setAdmins(adminsData);
           // If modal is open and user_id is empty, set to first member's ID
-          if (isOpen && data.length > 0 && !formData.user_id) {
-            setFormData(prev => ({ ...prev, user_id: data[0].id }));
+          if (isOpen && membersData.length > 0 && !formData.user_id) {
+            setFormData(prev => ({ ...prev, user_id: membersData[0].id }));
           }
-          console.log('Fetched members:', data);
+          console.log('Fetched members:', membersData);
+          console.log('Fetched admins:', adminsData);
         })
         .catch(err => {
           setMembersError('Failed to load members');
           setMembers([]);
+          setAdmins([]);
         })
         .finally(() => setMembersLoading(false));
     }
@@ -251,11 +260,11 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
               Assign To
             </label>
             {membersLoading ? (
-              <div className="text-sm text-gray-500">Loading members...</div>
+              <div className="text-sm text-gray-500">Loading members and admins...</div>
             ) : membersError ? (
               <div className="text-sm text-red-500">{membersError}</div>
-            ) : members.length === 0 ? (
-              <div className="text-sm text-gray-500">No members found. Please add members first.</div>
+            ) : (members.length === 0 && admins.length === 0) ? (
+              <div className="text-sm text-gray-500">No members or admins found. Please add members first.</div>
             ) : (
               <select
                 name="user_id"
@@ -264,10 +273,21 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
-                <option value="">Select Member</option>
-                {members.map(member => (
-                  <option key={member.id} value={member.id}>{member.name} ({member.email})</option>
-                ))}
+                <option value="">Select Member or Admin</option>
+                {members.length > 0 && (
+                  <optgroup label="Members">
+                    {members.map(member => (
+                      <option key={member.id} value={member.id}>{member.name} ({member.email})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {admins.length > 0 && (
+                  <optgroup label="Admins">
+                    {admins.map(admin => (
+                      <option key={admin.id} value={admin.id}>{admin.name} ({admin.email}) - Admin</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             )}
           </div>

@@ -13,13 +13,18 @@ const ProjectTasksPage: React.FC = () => {
   const { tasks, addTask, updateTask, deleteTask, filterTasks } = useTasks();
   const { projects } = useProjects();
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [admins, setAdmins] = useState<{ id: string; name: string }[]>([]);
   const [taskFilters, setTaskFilters] = useState({ project: projectId });
   const filteredTasks = filterTasks({ ...taskFilters, project: projectId });
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
 
   React.useEffect(() => {
-    authService.getMembers().then(data => {
-      setMembers(data.map(m => ({ id: m.id, name: m.name })));
+    Promise.all([
+      authService.getMembers(),
+      authService.getAdmins()
+    ]).then(([membersData, adminsData]) => {
+      setMembers(membersData.map(m => ({ id: m.id, name: m.name })));
+      setAdmins(adminsData.map(a => ({ id: a.id, name: a.name })));
     });
   }, []);
 
@@ -38,7 +43,10 @@ const ProjectTasksPage: React.FC = () => {
         filters={taskFilters}
         onFiltersChange={setTaskFilters}
         showMemberFilter={true}
-        members={members}      />
+        members={members}
+        admins={admins}
+        projects={projects.map(p => ({ id: p.id, name: p.name }))}
+      />
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {filteredTasks.length === 0 ? (
           <div className="text-gray-500">No tasks for this project.</div>
@@ -50,6 +58,9 @@ const ProjectTasksPage: React.FC = () => {
                 onDelete={deleteTask}
                 onStatusChange={updateTask}
                 showUser={true}
+                members={members}
+                admins={admins}
+                projects={projects.map(p => ({ id: p.id, name: p.name }))}
               />
             </div>
           ))
