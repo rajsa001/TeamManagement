@@ -94,6 +94,21 @@ const TaskFiltersComponent: React.FC<TaskFiltersProps> = ({
       </div>
 
       <div className="flex items-center space-x-2">
+        <label className="text-sm text-gray-600">Priority:</label>
+        <select
+          value={filters.priority || 'all'}
+          onChange={(e) => handleFilterChange('priority', e.target.value)}
+          className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Priorities</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+
+      <div className="flex items-center space-x-2">
         <label className="text-sm text-gray-600">Sort by Date:</label>
         <select
           value={filters.dueDateSort || 'asc'}

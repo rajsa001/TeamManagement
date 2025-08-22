@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { DailyTask, Member } from '../../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { DailyTask, Member, TaskAttachment } from '../../types';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
+import { fileUploadService } from '../../services/fileUpload';
+import { Paperclip, X, Link, File } from 'lucide-react';
 
 interface DailyTaskFormProps {
   isOpen: boolean;
@@ -32,6 +34,10 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   });
   const [loading, setLoading] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [urlInput, setUrlInput] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (task) {
@@ -43,6 +49,7 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         tags: task.tags || [],
         task_date: task.task_date
       });
+      setAttachments(task.attachments || []);
     } else {
       setFormData({
         task_name: '',
@@ -52,6 +59,7 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         tags: [],
         task_date: new Date().toISOString().split('T')[0]
       });
+      setAttachments([]);
     }
   }, [task, currentUserId, isAdmin, members]);
 
@@ -71,7 +79,7 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         ...formData,
         created_by: currentUserId,
         status: 'pending',
-        attachments: [],
+        attachments,
         is_active: true
       });
       onClose();
@@ -97,6 +105,72 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
       ...prev,
       tags: prev.tags.filter(tag => tag !== tagToRemove)
     }));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      for (const file of Array.from(files)) {
+        let tempAttachment: TaskAttachment | null = null;
+        try {
+          // Validate file
+          const validation = fileUploadService.validateFile(file);
+          if (!validation.isValid) {
+            alert(validation.error);
+            continue;
+          }
+
+          // Show loading state
+          tempAttachment = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            name: file.name,
+            url: URL.createObjectURL(file), // Temporary URL for preview
+            type: 'file',
+            file_type: file.type,
+            size: file.size,
+            uploaded_at: new Date().toISOString()
+          };
+          setAttachments(prev => [...prev, tempAttachment!]);
+
+          // Upload to Supabase Storage
+          const uploadedAttachment = await fileUploadService.uploadFile(file, currentUserId);
+          
+          // Replace temporary attachment with real one
+          setAttachments(prev => prev.map(att => 
+            att.id === tempAttachment!.id ? uploadedAttachment : att
+          ));
+        } catch (error) {
+          alert(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          // Remove temporary attachment if upload failed
+          if (tempAttachment) {
+            setAttachments(prev => prev.filter(att => att.id !== tempAttachment!.id));
+          }
+        }
+      }
+    }
+  };
+
+  const handleUrlAdd = () => {
+    if (urlInput.trim()) {
+      const attachment = fileUploadService.createUrlAttachment(urlInput.trim());
+      setAttachments(prev => [...prev, attachment]);
+      setUrlInput('');
+      setShowUrlInput(false);
+    }
+  };
+
+  const removeAttachment = async (id: string) => {
+    const attachment = attachments.find(att => att.id === id);
+    if (attachment && attachment.type === 'file') {
+      try {
+        // Delete from Supabase Storage
+        await fileUploadService.deleteFile(attachment.url);
+      } catch (error) {
+        console.error('Failed to delete file from storage:', error);
+        // Continue with removal even if storage deletion fails
+      }
+    }
+    setAttachments(prev => prev.filter(att => att.id !== id));
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -225,6 +299,90 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
                     ×
                   </button>
                 </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Attachments Section */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            📎 Attachments <span className="text-xs text-gray-500">(Optional)</span>
+          </label>
+          <div className="flex space-x-3 mb-3">
+            <Button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 shadow-sm"
+            >
+              <Paperclip className="w-4 h-4" />
+              <span className="font-medium">Upload File</span>
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setShowUrlInput(!showUrlInput)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors duration-200 shadow-sm"
+            >
+              <Link className="w-4 h-4" />
+              <span className="font-medium">Add URL</span>
+            </Button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+            accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx"
+          />
+          {showUrlInput && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-3">
+              <div className="flex space-x-3">
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="Enter URL (e.g., https://example.com/document.pdf)..."
+                  className="flex-1 px-4 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+                <Button
+                  type="button"
+                  onClick={handleUrlAdd}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm"
+                >
+                  Add URL
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setShowUrlInput(false)}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 shadow-sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-green-600 mt-2">💡 Add links to external documents, images, or resources</p>
+            </div>
+          )}
+          {attachments.length > 0 && (
+            <div className="space-y-2">
+              {attachments.map((attachment) => (
+                <div key={attachment.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                  <div className="flex items-center space-x-2">
+                    {attachment.type === 'file' ? (
+                      <File className="w-4 h-4 text-gray-500" />
+                    ) : (
+                      <Link className="w-4 h-4 text-gray-500" />
+                    )}
+                    <span className="text-sm text-gray-700 truncate">{attachment.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(attachment.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               ))}
             </div>
           )}

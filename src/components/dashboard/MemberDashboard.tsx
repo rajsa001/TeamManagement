@@ -553,7 +553,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         ) : (
           <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {filteredTasks.map(task => (
-              <div key={task.id} className="flex h-80">
+                              <div key={task.id} className="flex h-[28rem]">
               <TaskCard
                 task={task}
                 onDelete={deleteTask}

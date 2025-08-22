@@ -33,12 +33,23 @@ export interface Project {
   updated_at: string;
 }
 
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: 'url' | 'file';
+  file_type?: string;
+  size?: number;
+  uploaded_at: string;
+}
+
 export interface Task {
   id: string;
   user_id: string;
   task_name: string;
   description: string;
   due_date: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   status: 'pending' | 'not_started' | 'in_progress' | 'completed';
   created_at: string;
   updated_at: string;
@@ -46,6 +57,7 @@ export interface Task {
   project_id?: string;
   project?: Project;
   progress: number; // 0-100
+  attachments?: TaskAttachment[];
 }
 
 export interface Leave {
@@ -79,6 +91,7 @@ export interface AuthContextType {
 
 export interface TaskFilters {
   status?: 'not_started' | 'in_progress' | 'completed' | 'pending';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   member?: string;
   dueDateSort?: 'asc' | 'desc';
   search?: string;

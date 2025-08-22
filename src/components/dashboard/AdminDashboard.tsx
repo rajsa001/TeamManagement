@@ -1012,7 +1012,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredTasks.map(task => (
-              <div key={task.id} className="flex h-80">
+                              <div key={task.id} className="flex h-[28rem]">
               <TaskCard
                 task={task}
                 onDelete={deleteTask}

@@ -453,10 +453,23 @@ export const useTasks = () => {
 
   const filterTasks = (filters: TaskFilters) => {
     return tasks.filter(task => {
+      // Check both member and assignedTo filters for backward compatibility
       if (filters.member && task.user_id !== filters.member) return false;
+      if (filters.assignedTo && task.user_id !== filters.assignedTo) return false;
       if (filters.project && task.project_id !== filters.project) return false;
       if (filters.status && task.status !== filters.status) return false;
-      // Optionally, add search or dueDateSort logic here if needed
+      if (filters.priority && task.priority !== filters.priority) return false;
+      
+      // Search filter
+      if (filters.search) {
+        const searchTerm = filters.search.toLowerCase();
+        const taskName = task.task_name.toLowerCase();
+        const description = task.description.toLowerCase();
+        if (!taskName.includes(searchTerm) && !description.includes(searchTerm)) {
+          return false;
+        }
+      }
+      
       return true;
     });
   };

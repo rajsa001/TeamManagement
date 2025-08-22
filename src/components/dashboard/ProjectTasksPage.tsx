@@ -39,18 +39,19 @@ const ProjectTasksPage: React.FC = () => {
         onFiltersChange={setTaskFilters}
         showMemberFilter={true}
         members={members}      />
-      <div className="grid gap-4">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {filteredTasks.length === 0 ? (
           <div className="text-gray-500">No tasks for this project.</div>
         ) : (
           filteredTasks.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onDelete={deleteTask}
-              onStatusChange={updateTask}
-              showUser={true}
-            />
+                            <div key={task.id} className="flex h-[28rem]">
+              <TaskCard
+                task={task}
+                onDelete={deleteTask}
+                onStatusChange={updateTask}
+                showUser={true}
+              />
+            </div>
           ))
         )}
       </div>
