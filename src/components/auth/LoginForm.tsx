@@ -5,7 +5,7 @@ import Button from '../ui/Button';
 import Card from '../ui/Card';
 
 interface LoginFormProps {
-  role: 'admin' | 'member';
+  role: 'admin' | 'member' | 'project_manager';
   onBack: () => void;
 }
 
@@ -27,11 +27,18 @@ const LoginForm: React.FC<LoginFormProps> = ({ role, onBack }) => {
   return (
     <Card className="w-full max-w-md">
       <div className="text-center mb-6">
+        <div className="flex justify-center mb-4">
+          <img 
+            src="/logo.png" 
+            alt="Tasknova Logo" 
+            className="h-12 w-auto"
+          />
+        </div>
         <h2 className="text-2xl font-bold text-gray-900">
-          {role === 'admin' ? 'Admin' : 'Team Member'} Login
+          {role === 'admin' ? 'Admin' : role === 'project_manager' ? 'Project Manager' : 'Team Member'} Login
         </h2>
         <p className="text-gray-600 mt-2">
-          Sign in to access your dashboard
+          Sign in to access your Tasknova dashboard
         </p>
       </div>
 
@@ -46,7 +53,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ role, onBack }) => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={role === 'admin' ? 'admin@company.com' : 'member@company.com'}
+              placeholder={role === 'admin' ? 'contact.tasknova@gmail.com' : role === 'project_manager' ? 'pm@company.com' : 'member@company.com'}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             />

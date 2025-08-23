@@ -45,8 +45,8 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
         query = query.or(`task_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
       }
 
-      // If not admin, only show user's own tasks
-      if (user.role !== 'admin') {
+      // If not admin or project manager, only show user's own tasks
+      if (user.role !== 'admin' && user.role !== 'project_manager') {
         query = query.eq('user_id', user.id);
       }
 
@@ -78,8 +78,8 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       // Get unique user IDs from tasks
       const userIds = [...new Set(tasks.map(task => task.user_id))];
       
-      // Fetch both members and admins
-      const [membersData, adminsData] = await Promise.all([
+      // Fetch members, admins, and project managers
+      const [membersData, adminsData, projectManagersData] = await Promise.all([
         supabase
           .from('members')
           .select('id, name, email, avatar_url')
@@ -89,10 +89,15 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
           .from('admins')
           .select('id, name, email, avatar_url')
           .in('id', userIds)
+          .eq('is_active', true),
+        supabase
+          .from('project_managers')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds)
           .eq('is_active', true)
       ]);
 
-      // Combine members and admins into a single map
+      // Combine members, admins, and project managers into a single map
       const userMap = new Map();
       
       if (membersData.data) {
@@ -104,6 +109,12 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       if (adminsData.data) {
         adminsData.data.forEach(admin => {
           userMap.set(admin.id, { ...admin, role: 'admin' });
+        });
+      }
+      
+      if (projectManagersData.data) {
+        projectManagersData.data.forEach(pm => {
+          userMap.set(pm.id, { ...pm, role: 'project_manager' });
         });
       }
 

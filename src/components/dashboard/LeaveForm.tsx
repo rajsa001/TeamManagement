@@ -87,16 +87,43 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
   }, []);
 
   useEffect(() => {
-    // Fetch leave balance for the current user
+    // Fetch leave balance for the current user (supports both members and project managers)
     const fetchLeaveBalance = async () => {
       if (!user?.id) return;
       
-      const { data, error } = await supabase
-        .from('member_leave_balances')
-        .select('sick_leaves, casual_leaves, paid_leaves')
-        .eq('member_id', user.id)
-        .eq('year', new Date().getFullYear())
-        .single();
+             // First try to find balance for member
+       let { data, error } = await supabase
+         .from('member_leave_balances')
+         .select('sick_leaves, casual_leaves, paid_leaves')
+         .eq('member_id', user.id)
+         .eq('year', new Date().getFullYear())
+         .single();
+       
+       // If not found as member, try as admin
+       if (error || !data) {
+         const { data: adminData, error: adminError } = await supabase
+           .from('member_leave_balances')
+           .select('sick_leaves, casual_leaves, paid_leaves')
+           .eq('admin_id', user.id)
+           .eq('year', new Date().getFullYear())
+           .single();
+         
+         data = adminData;
+         error = adminError;
+       }
+       
+       // If not found as admin, try as project manager
+       if (error || !data) {
+         const { data: pmData, error: pmError } = await supabase
+           .from('member_leave_balances')
+           .select('sick_leaves, casual_leaves, paid_leaves')
+           .eq('project_manager_id', user.id)
+           .eq('year', new Date().getFullYear())
+           .single();
+         
+         data = pmData;
+         error = pmError;
+       }
       
       if (!error && data) {
         setLeaveBalance(data);
@@ -264,46 +291,7 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
       formData.leave_date = '';
     }
     setError('');
-    // Deduct leave balance immediately
-    if (!leaveBalance) {
-      toast.error('❌ Unable to fetch leave balance. Please try again.', { autoClose: 4000 });
-      return;
-    }
-    if (!user?.id) {
-      toast.error('❌ User not found.', { autoClose: 4000 });
-      return;
-    }
-    let updatedBalance = {
-      sick_leaves: leaveBalance.sick_leaves,
-      casual_leaves: leaveBalance.casual_leaves,
-      paid_leaves: leaveBalance.paid_leaves,
-    };
-    switch (formData.leave_type) {
-      case 'sick':
-        updatedBalance.sick_leaves = Math.max(0, updatedBalance.sick_leaves - requestedDays);
-        break;
-      case 'casual':
-        updatedBalance.casual_leaves = Math.max(0, updatedBalance.casual_leaves - requestedDays);
-        break;
-      case 'paid':
-        updatedBalance.paid_leaves = Math.max(0, updatedBalance.paid_leaves - requestedDays);
-        break;
-      default:
-        toast.error('❌ Invalid leave type selected.', { autoClose: 4000 });
-        return;
-    }
-    // Update leave balance in DB
-    const { error: updateError } = await supabase
-      .from('member_leave_balances')
-      .update(updatedBalance)
-      .eq('member_id', user.id)
-      .eq('year', new Date().getFullYear());
-    if (updateError) {
-      toast.error('❌ Failed to update leave balance. Please try again.', { autoClose: 4000 });
-      return;
-    }
-    // Update local state for live display
-    setLeaveBalance(updatedBalance);
+    // Note: Leave balance will be deducted automatically when the leave is approved by admin
     onSubmit(formData);
     setFormData({
       category: 'single-day',

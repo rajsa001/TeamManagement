@@ -17,6 +17,7 @@ interface TaskCardProps {
   section?: 'completed' | 'today' | 'upcoming' | 'blocked'; // NEW
   members?: { id: string; name: string }[];
   admins?: { id: string; name: string }[];
+  projectManagers?: { id: string; name: string }[];
   projects?: { id: string; name: string }[];
 }
 
@@ -29,6 +30,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   section, // NEW
   members = [],
   admins = [],
+  projectManagers = [],
   projects = []
 }) => {
   const { user } = useAuth();
@@ -115,6 +117,18 @@ const TaskCard: React.FC<TaskCardProps> = ({
       case 'low': return CheckCircle2;
       default: return Calendar;
     }
+  };
+
+  const getUserName = (userId: string) => {
+    const member = members.find(m => m.id === userId);
+    const admin = admins.find(a => a.id === userId);
+    const pm = projectManagers.find(p => p.id === userId);
+    return member?.name || admin?.name || pm?.name || 'Unknown User';
+  };
+
+  const getProjectName = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    return project?.name || 'Unknown Project';
   };
 
   const StatusIcon = getStatusIcon(task.status);
@@ -239,59 +253,59 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   return (
     <>
-      <Card
-        className={`flex flex-col h-full w-full min-h-0 min-w-0 overflow-hidden ${borderClass} ${isOverdue && !section ? 'border-red-200 bg-red-50' : ''} group transition-all duration-200`}
-        hover
-        animated
-        accentColor={accentColor}
-        padding="md"
-      >
+    <Card
+      className={`flex flex-col h-full w-full min-h-0 min-w-0 overflow-hidden ${borderClass} ${isOverdue && !section ? 'border-red-200 bg-red-50' : ''} group transition-all duration-200`}
+      hover
+      animated
+      accentColor={accentColor}
+      padding="md"
+    >
         {/* Action buttons on top center */}
-        <div className="flex justify-center mb-3">
-          <div className="flex items-center gap-1">
+        <div className="flex justify-center mb-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <div className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200">
             {/* View button - always visible */}
             <Button
               variant="ghost"
               size="sm"
               icon={Eye}
               onClick={() => setIsViewOpen(true)}
-              className="text-gray-500 hover:text-gray-700 focus:ring-2 focus:ring-gray-200 rounded-full"
+              className="text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full"
               title="View task details"
             />
             {/* Overdue warning icon */}
-            {isOverdue && section !== 'today' && (
-              <button
-                type="button"
-                className="p-1 rounded-full bg-red-100 hover:bg-red-200 text-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
-                onClick={() => setShowOverdue(v => !v)}
-                title="Show overdue warning"
-                tabIndex={0}
-              >
-                <AlertCircle className="w-5 h-5" />
-              </button>
-            )}
+              {isOverdue && section !== 'today' && (
+                <button
+                  type="button"
+                  className="p-1 rounded-full bg-red-100 hover:bg-red-200 text-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
+                  onClick={() => setShowOverdue(v => !v)}
+                  title="Show overdue warning"
+                  tabIndex={0}
+                >
+                  <AlertCircle className="w-5 h-5" />
+                </button>
+              )}
             {/* Edit and Delete buttons - only for authorized users */}
-            {(user?.role === 'admin' || task.user_id === user?.id) && onUpdate && (
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={Pencil}
-                onClick={() => setIsEditOpen(true)}
-                className="text-blue-500 hover:text-blue-700 focus:ring-2 focus:ring-blue-200 rounded-full"
+          {(user?.role === 'admin' || user?.role === 'project_manager' || task.user_id === user?.id) && onUpdate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={Pencil}
+              onClick={() => setIsEditOpen(true)}
+              className="text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full"
                 title="Edit task"
               />
             )}
-            {(user?.role === 'admin' || task.user_id === user?.id) && (
+            {(user?.role === 'admin' || user?.role === 'project_manager' || task.user_id === user?.id) && (
               <Button
                 variant="ghost"
                 size="sm"
                 icon={Trash2}
                 onClick={() => onDelete(task.id)}
-                className="text-red-500 hover:text-red-700 focus:ring-2 focus:ring-red-200 rounded-full"
+                className="text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full"
                 title="Delete task"
-              />
-            )}
-          </div>
+            />
+          )}
+        </div>
         </div>
 
         {/* Overdue warning popover */}
@@ -310,23 +324,23 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <p className="text-sm text-gray-600 mb-1 line-clamp-2 break-words">{task.description}</p>
           {task.project && (
             <div className="text-xs text-blue-700 mt-1 truncate">Project: {task.project.name}</div>
-          )}
-        </div>
+        )}
+      </div>
 
       <div className="flex items-center justify-between mb-2">
         <div className="w-full">
-                      <div className="text-sm text-gray-700 mb-1 flex items-center">
-              <span className="font-semibold mr-1">Due Date:</span>
-              <Calendar className="w-4 h-4 mr-1" />
-              {new Date(task.due_date).toLocaleDateString()}
-            </div>
-            <div className="text-sm text-gray-700 mb-1 flex items-center">
-              <span className="font-semibold mr-1">Status:</span>
-              <Badge variant={getStatusVariant(task.status)} className="px-3 py-1 text-base font-semibold shadow-sm animate-pulse">
-                <StatusIcon className="w-4 h-4 mr-1" />
-                {task.status}
-              </Badge>
-            </div>
+          <div className="text-sm text-gray-700 mb-1 flex items-center">
+            <span className="font-semibold mr-1">Due Date:</span>
+            <Calendar className="w-4 h-4 mr-1" />
+            {new Date(task.due_date).toLocaleDateString()}
+          </div>
+          <div className="text-sm text-gray-700 mb-1 flex items-center">
+            <span className="font-semibold mr-1">Status:</span>
+            <Badge variant={getStatusVariant(task.status)} className="px-3 py-1 text-base font-semibold shadow-sm animate-pulse">
+              <StatusIcon className="w-4 h-4 mr-1" />
+              {task.status}
+            </Badge>
+          </div>
             <div className="text-sm text-gray-700 mb-1 flex items-center">
               <span className="font-semibold mr-1">Priority:</span>
               <Badge variant={getPriorityVariant(task.priority)} className="px-3 py-1 text-base font-semibold shadow-sm">
@@ -335,11 +349,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
               </Badge>
             </div>
  
-            {(showUser && task.user) || (user?.role === 'admin' && task.user) ? (
+          {(showUser || user?.role === 'admin') ? (
             <div className="text-sm text-gray-700 mb-1 flex items-center">
               <span className="font-semibold mr-1">Assigned to:</span>
               <User className="w-4 h-4 mr-1" />
-              {task.user.name}
+              {getUserName(task.user_id)}
             </div>
           ) : null}
 
@@ -395,7 +409,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       )}
 
-            {/* Complete button for all tasks except completed */}
+      {/* Complete button for all tasks except completed */}
       {task.status !== 'completed' && (
         <Button
           variant="outline"
@@ -490,12 +504,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
                        ))}
                      </optgroup>
                    )}
+                   {projectManagers.length > 0 && (
+                     <optgroup label="Project Managers">
+                       {projectManagers.map(pm => (
+                         <option key={pm.id} value={pm.id}>{pm.name} (Project Manager)</option>
+                       ))}
+                     </optgroup>
+                   )}
                  </select>
                </div>
              )}
 
-            {/* Project field - only for admins */}
-            {user?.role === 'admin' && (
+            {/* Project field - only for admins and project managers */}
+            {(user?.role === 'admin' || user?.role === 'project_manager') && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
                 <select
@@ -802,7 +823,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </Modal>
       )}
      </>
-   );
- };
+  );
+};
 
 export default TaskCard;

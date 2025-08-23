@@ -30,12 +30,10 @@ const AdminProfile: React.FC = () => {
     e.preventDefault();
     setProfileLoading(true);
     let avatar_url = user.avatar_url;
-    console.log('[DEBUG] AdminProfile: user.id', user.id);
     if (avatarFile) {
       setAvatarUploading(true);
       const fileExt = avatarFile.name.split('.').pop();
       const fileName = `${user.id}_${Date.now()}.${fileExt}`;
-      console.log('[DEBUG] AdminProfile: avatarFile selected', fileName);
       await supabase.storage.from('avatars').remove([fileName]);
       const { data: uploadData, error: uploadError } = await supabase.storage.from('avatars').upload(fileName, avatarFile, { upsert: true });
       setAvatarUploading(false);
@@ -64,13 +62,11 @@ const AdminProfile: React.FC = () => {
       email: profileForm.email,
       avatar_url,
     };
-    console.log('[DEBUG] AdminProfile: update payload', updatePayload);
     const { error, data: updateData } = await supabase
       .from('admins')
       .update(updatePayload)
       .eq('id', user.id)
       .select();
-    console.log('[DEBUG] AdminProfile: update response', { error, updateData });
     setProfileLoading(false);
     if (!error) {
       // Fetch updated user from DB
@@ -79,7 +75,6 @@ const AdminProfile: React.FC = () => {
         .select('*')
         .eq('id', user.id)
         .single();
-      console.log('[DEBUG] AdminProfile: fetch updated user', { updatedUser, fetchError });
       if (updatedUser) {
         const newUser = { ...user, ...updatedUser, role: 'admin' };
         setUser(newUser);

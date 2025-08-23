@@ -5,7 +5,7 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { authService } from '../../services/auth';
 import { useProjects } from '../../hooks/useProjects';
-import { Paperclip, X, Link, File } from 'lucide-react';
+import { Paperclip, X, Link, File, Upload } from 'lucide-react';
 import { fileUploadService } from '../../services/fileUpload';
 
 interface TaskFormProps {
@@ -13,9 +13,10 @@ interface TaskFormProps {
   onClose: () => void;
   onSubmit: (task: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => void;
   initialProjectId?: string;
+  availableProjects?: { id: string; name: string }[];
 }
 
-const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialProjectId }) => {
+const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialProjectId, availableProjects }) => {
   const { user } = useAuth();
      const [formData, setFormData] = useState({
      task_name: '',
@@ -33,23 +34,30 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
+  const [projectManagers, setProjectManagers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState('');
   const { projects, loading: projectsLoading } = useProjects();
+  
+  // Drag and drop states
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    if (user?.role === 'admin') {
+    if (user?.role === 'admin' || user?.role === 'project_manager') {
       setMembersLoading(true);
       setMembersError('');
       
-      // Fetch both members and admins
+      // Fetch members, admins, and project managers
       Promise.all([
         authService.getMembers(),
-        authService.getAdmins()
+        authService.getAdmins(),
+        authService.getProjectManagers()
       ])
-        .then(([membersData, adminsData]) => {
+        .then(([membersData, adminsData, projectManagersData]) => {
           setMembers(membersData);
           setAdmins(adminsData);
+          setProjectManagers(projectManagersData);
           // If modal is open and user_id is empty, set to first member's ID
           if (isOpen && membersData.length > 0 && !formData.user_id) {
             setFormData(prev => ({ ...prev, user_id: membersData[0].id }));
@@ -103,43 +111,74 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && user) {
-      for (const file of Array.from(files)) {
-        let tempAttachment: TaskAttachment | null = null;
-        try {
-          // Validate file
-          const validation = fileUploadService.validateFile(file);
-          if (!validation.isValid) {
-            alert(validation.error);
-            continue;
-          }
+      await uploadFiles(Array.from(files));
+    }
+  };
 
-          // Show loading state
-          tempAttachment = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-            name: file.name,
-            url: URL.createObjectURL(file), // Temporary URL for preview
-            type: 'file',
-            file_type: file.type,
-            size: file.size,
-            uploaded_at: new Date().toISOString()
-          };
-          setAttachments(prev => [...prev, tempAttachment!]);
+  const uploadFiles = async (files: File[]) => {
+    if (!user) return;
+    
+    setIsUploading(true);
+    
+    for (const file of files) {
+      let tempAttachment: TaskAttachment | null = null;
+      try {
+        // Validate file
+        const validation = fileUploadService.validateFile(file);
+        if (!validation.isValid) {
+          alert(validation.error);
+          continue;
+        }
 
-          // Upload to Supabase Storage
-          const uploadedAttachment = await fileUploadService.uploadFile(file, user.id);
-          
-          // Replace temporary attachment with real one
-          setAttachments(prev => prev.map(att => 
-            att.id === tempAttachment!.id ? uploadedAttachment : att
-          ));
-        } catch (error) {
-          alert(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          // Remove temporary attachment if upload failed
-          if (tempAttachment) {
-            setAttachments(prev => prev.filter(att => att.id !== tempAttachment!.id));
-          }
+        // Show loading state
+        tempAttachment = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          url: URL.createObjectURL(file), // Temporary URL for preview
+          type: 'file',
+          file_type: file.type,
+          size: file.size,
+          uploaded_at: new Date().toISOString()
+        };
+        setAttachments(prev => [...prev, tempAttachment!]);
+
+        // Upload to Supabase Storage
+        const uploadedAttachment = await fileUploadService.uploadFile(file, user.id);
+        
+        // Replace temporary attachment with real one
+        setAttachments(prev => prev.map(att => 
+          att.id === tempAttachment!.id ? uploadedAttachment : att
+        ));
+      } catch (error) {
+        alert(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Remove temporary attachment if upload failed
+        if (tempAttachment) {
+          setAttachments(prev => prev.filter(att => att.id !== tempAttachment!.id));
         }
       }
+    }
+    
+    setIsUploading(false);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      await uploadFiles(files);
     }
   };
 
@@ -254,7 +293,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
            </select>
         </div>
 
-        {user?.role === 'admin' && (
+        {(user?.role === 'admin' || user?.role === 'project_manager') && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Assign To
@@ -263,8 +302,8 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
               <div className="text-sm text-gray-500">Loading members and admins...</div>
             ) : membersError ? (
               <div className="text-sm text-red-500">{membersError}</div>
-            ) : (members.length === 0 && admins.length === 0) ? (
-              <div className="text-sm text-gray-500">No members or admins found. Please add members first.</div>
+            ) : (members.length === 0 && admins.length === 0 && projectManagers.length === 0) ? (
+              <div className="text-sm text-gray-500">No members, admins, or project managers found. Please add users first.</div>
             ) : (
               <select
                 name="user_id"
@@ -285,6 +324,13 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
                   <optgroup label="Admins">
                     {admins.map(admin => (
                       <option key={admin.id} value={admin.id}>{admin.name} ({admin.email}) - Admin</option>
+                    ))}
+                  </optgroup>
+                )}
+                {projectManagers.length > 0 && (
+                  <optgroup label="Project Managers">
+                    {projectManagers.map(pm => (
+                      <option key={pm.id} value={pm.id}>{pm.name} ({pm.email}) - Project Manager</option>
                     ))}
                   </optgroup>
                 )}
@@ -309,7 +355,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
               disabled={!!initialProjectId}
             >
               <option value="">Select Project</option>
-              {projects.map(project => (
+              {(availableProjects || projects).map(project => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
@@ -322,17 +368,44 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
             Attachments
           </label>
           
+          {/* Drag and Drop Zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
+              isDragOver 
+                ? 'border-blue-500 bg-blue-50' 
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <Upload className={`w-8 h-8 mx-auto mb-2 ${isDragOver ? 'text-blue-500' : 'text-gray-400'}`} />
+            <p className={`text-sm ${isDragOver ? 'text-blue-600' : 'text-gray-600'}`}>
+              {isDragOver ? 'Drop files here' : 'Drag and drop files here, or click to browse'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Supports images, PDFs, documents, and spreadsheets (max 50MB)
+            </p>
+            {isUploading && (
+              <div className="mt-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="text-xs text-gray-500 mt-1">Uploading...</p>
+              </div>
+            )}
+          </div>
+          
           {/* Attachment Controls */}
-          <div className="flex space-x-2 mb-3">
+          <div className="flex space-x-2 mt-3">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center space-x-1"
+              disabled={isUploading}
             >
               <Paperclip className="w-4 h-4" />
-              <span>Upload File</span>
+              <span>Browse Files</span>
             </Button>
             <Button
               type="button"
@@ -340,6 +413,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
               size="sm"
               onClick={() => setShowUrlInput(!showUrlInput)}
               className="flex items-center space-x-1"
+              disabled={isUploading}
             >
               <Link className="w-4 h-4" />
               <span>Add URL</span>

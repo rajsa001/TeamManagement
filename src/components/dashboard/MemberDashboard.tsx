@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { Plus, User, Bell, CheckCircle2, Calendar, Clock, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, User, Bell, CheckCircle2, Calendar, Clock, AlertCircle, CheckSquare } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useAuth } from '../../contexts/AuthContext';
+import { authService } from '../../services/auth';
 import { TaskFilters } from '../../types';
 import Button from '../ui/Button';
 import TaskCard from './TaskCard';
 import TaskForm from './TaskForm';
 import TaskFiltersComponent from './TaskFilters';
+import ProjectFiltersComponent from './ProjectFilters';
 import LeaveCalendar from './LeaveCalendar';
 import DashboardStats from './DashboardStats';
 import Modal from '../ui/Modal';
@@ -16,9 +18,11 @@ import ProjectCard from './ProjectCard';
 import { useProjects } from '../../hooks/useProjects';
 import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
-import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { MemberDailyTasksPage } from './MemberDailyTasksPage';
+import TaskViewSelector, { TaskViewType } from './TaskViewSelector';
+import TaskListView from './TaskListView';
+import TaskCalendarView from './TaskCalendarView';
 
 interface MemberDashboardProps {
   activeTab: string;
@@ -32,6 +36,14 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
+  const [taskView, setTaskView] = useState<TaskViewType>('grid');
+  const [projectFilters, setProjectFilters] = useState({
+    search: '',
+    status: '',
+    client: '',
+    projectManager: '',
+    dateSort: 'newest'
+  });
   const [showProfile, setShowProfile] = useState(false);
   const [editLeave, setEditLeave] = useState(null);
   const [deleteLeaveId, setDeleteLeaveId] = useState<string | null>(null);
@@ -64,6 +76,9 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [leaveBalance, setLeaveBalance] = useState<{ sick_leaves: number; casual_leaves: number; paid_leaves: number } | null>(null);
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [admins, setAdmins] = useState<{ id: string; name: string }[]>([]);
+  const [projectManagers, setProjectManagers] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
     if (activeTab !== 'leaves' || !user) return;
     const fetchBalance = async () => {
@@ -235,6 +250,27 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     // --- END real-time ---
   }, [user]);
 
+  // Fetch members, admins, and project managers for task display
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMembersAndAdmins = async () => {
+      const [membersData, adminsData, projectManagersData] = await Promise.all([
+        authService.getMembers(),
+        authService.getAdmins(),
+        authService.getProjectManagers()
+      ]);
+      if (isMounted) {
+        setMembers(membersData.map(m => ({ id: m.id, name: m.name })));
+        setAdmins(adminsData.map(a => ({ id: a.id, name: a.name })));
+        setProjectManagers(projectManagersData.map(pm => ({ id: pm.id, name: pm.name })));
+      }
+    };
+    fetchMembersAndAdmins();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Real-time subscription for tasks (member sees all changes to their tasks, robust to admin actions)
   useEffect(() => {
     if (!user) return;
@@ -265,7 +301,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   useEffect(() => {
     const fetchHolidays = async () => {
       const { data, error } = await supabase
-        .from('holidays')
+        .from('company_holidays')
         .select('*')
         .order('date', { ascending: true });
       
@@ -277,7 +313,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     fetchHolidays();
   }, []);
 
-  const filteredTasks = filterTasks(taskFilters);
+  const filteredTasks = filterTasks({ ...taskFilters, userId: user?.id });
 
   const handleStatusChange = (id: string, status: 'pending' | 'completed' | 'blocked') => {
     updateTask(id, { status });
@@ -408,7 +444,15 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
         ) : (
           <>
             <div className="h-80 flex">
-              <TaskCard key={tasks[0].id} task={tasks[0]} section={sectionName} />
+              <TaskCard 
+                key={tasks[0].id} 
+                task={tasks[0]} 
+                section={sectionName}
+                members={members}
+                admins={admins}
+                projectManagers={projectManagers}
+                projects={projects.map(p => ({ id: p.id, name: p.name }))}
+              />
             </div>
             {tasks.length > 1 && !openSections[sectionKey] && (
               <button
@@ -423,7 +467,14 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
                 <div className="space-y-4">
                   {tasks.slice(1).map(task => (
                     <div key={task.id} className="h-80 flex">
-                      <TaskCard task={task} section={sectionName} />
+                      <TaskCard 
+                        task={task} 
+                        section={sectionName}
+                        members={members}
+                        admins={admins}
+                        projectManagers={projectManagers}
+                        projects={projects.map(p => ({ id: p.id, name: p.name }))}
+                      />
                     </div>
                   ))}
                 </div>
@@ -474,12 +525,12 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
       <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
         {/* Personalized greeting at the top */}
         <div className="flex items-center justify-between pt-4 pb-2">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <div className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <span>
               Hey <span className="text-blue-600 font-extrabold animate-pulse">{memberName}</span>, {getGreeting()} 
             </span>
             <span className="animate-waving-hand text-3xl ml-1" role="img" aria-label="wave">👋</span>
-          </h1>
+          </div>
         </div>
         <DashboardStats tasks={tasks} leaves={leaves} />
         {/* Task sections grid */}
@@ -530,39 +581,113 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
 
   if (activeTab === 'tasks') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">My Tasks</h1>
-          <Button
-            icon={Plus}
-            onClick={() => setIsTaskFormOpen(true)}
-          >
-            Add Task
-          </Button>
+      <div className="p-6 space-y-6">
+        {/* Header with Add Task button and View Selector */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-gray-800">My Tasks</h2>
+            <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {filteredTasks.length} tasks
+            </span>
+          </div>
+          <div className="flex items-center space-x-4">
+            <TaskViewSelector
+              currentView={taskView}
+              onViewChange={setTaskView}
+            />
+            <Button
+              icon={Plus}
+              onClick={() => setIsTaskFormOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Add Task
+            </Button>
+          </div>
         </div>
 
-        <TaskFiltersComponent
-          filters={taskFilters}
-          onFiltersChange={setTaskFilters}
-        />
+        {/* Filters Section */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <TaskFiltersComponent
+            filters={taskFilters}
+            onFiltersChange={setTaskFilters}
+          />
+        </div>
 
+        {/* Loading State */}
         {tasksLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading tasks...</p>
+            </div>
           </div>
         ) : (
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {filteredTasks.map(task => (
-                              <div key={task.id} className="flex h-[28rem]">
-              <TaskCard
-                task={task}
+          /* Task Views */
+          <>
+            {taskView === 'grid' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredTasks.length === 0 ? (
+                  <div className="col-span-full">
+                    <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+                      <CheckSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+                      <p className="text-gray-500 mb-4">No tasks match your current filters.</p>
+                      <Button
+                        onClick={() => setTaskFilters({})}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Clear Filters
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  filteredTasks.map(task => (
+                    <div key={task.id} className="flex h-[28rem]">
+                      <TaskCard
+                        task={task}
+                        onDelete={deleteTask}
+                        onStatusChange={handleStatusChange}
+                        onUpdate={updateTask}
+                        members={members}
+                        admins={admins}
+                        projectManagers={projectManagers}
+                        projects={projects.map(p => ({ id: p.id, name: p.name }))}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {taskView === 'list' && (
+              <TaskListView
+                tasks={filteredTasks}
                 onDelete={deleteTask}
                 onStatusChange={handleStatusChange}
                 onUpdate={updateTask}
+                showUser={false}
+                members={members}
+                admins={admins}
+                projectManagers={projectManagers}
+                projects={projects.map(p => ({ id: p.id, name: p.name }))}
               />
-              </div>
-            ))}
-          </div>
+            )}
+
+            {taskView === 'calendar' && (
+              <TaskCalendarView
+                tasks={filteredTasks}
+                onDelete={deleteTask}
+                onStatusChange={handleStatusChange}
+                onUpdate={updateTask}
+                showUser={false}
+                members={members}
+                admins={admins}
+                projectManagers={projectManagers}
+                projects={projects.map(p => ({ id: p.id, name: p.name }))}
+              />
+            )}
+          </>
         )}
 
         <TaskForm
@@ -668,15 +793,82 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {projects.map(project => {
-              const projectTasks = tasks.filter(task => task.project_id === project.id);
-              if (projectTasks.length === 0) return null;
-              return (
-                <ProjectCard key={project.id} project={project} tasks={projectTasks} />
-              );
-            })}
-          </div>
+          <>
+            {/* Project Filters */}
+            <Card className="border-0 shadow-md bg-white/80 backdrop-blur-sm">
+              <div className="p-6">
+                <ProjectFiltersComponent
+                  filters={projectFilters}
+                  onFiltersChange={setProjectFilters}
+                  clients={[...new Set(projects.map(p => p.client_name).filter(Boolean))]}
+                  projectManagers={[]}
+                />
+              </div>
+            </Card>
+
+            {/* Filtered Projects Grid */}
+            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {projects
+                .filter(project => {
+                  const projectTasks = tasks.filter(task => task.project_id === project.id);
+                  if (projectTasks.length === 0) return false;
+
+                  // Search filter
+                  if (projectFilters.search) {
+                    const searchTerm = projectFilters.search.toLowerCase();
+                    const matchesName = project.name.toLowerCase().includes(searchTerm);
+                    const matchesDescription = project.description?.toLowerCase().includes(searchTerm) || false;
+                    const matchesClient = project.client_name?.toLowerCase().includes(searchTerm) || false;
+                    if (!matchesName && !matchesDescription && !matchesClient) return false;
+                  }
+
+                  // Status filter
+                  if (projectFilters.status) {
+                    // Use the project's actual status from database if available
+                    if (project.status && project.status === projectFilters.status) {
+                      // Status matches exactly
+                    } else if (!project.status) {
+                      // Fallback to calculating status from tasks
+                      const completedTasks = projectTasks.filter(task => task.status === 'completed').length;
+                      const inProgressTasks = projectTasks.filter(task => task.status === 'in_progress').length;
+                      const projectStatus = completedTasks === projectTasks.length && projectTasks.length > 0 ? 'completed' : 
+                                          inProgressTasks > 0 ? 'in_progress' : 'pending';
+                      if (projectStatus !== projectFilters.status) return false;
+                    } else {
+                      // Project has status but it doesn't match filter
+                      return false;
+                    }
+                  }
+
+                  // Client filter
+                  if (projectFilters.client && project.client_name !== projectFilters.client) {
+                    return false;
+                  }
+
+                  return true;
+                })
+                .sort((a, b) => {
+                  // Sort filter
+                  switch (projectFilters.dateSort) {
+                    case 'oldest':
+                      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+                    case 'name_asc':
+                      return a.name.localeCompare(b.name);
+                    case 'name_desc':
+                      return b.name.localeCompare(a.name);
+                    case 'newest':
+                    default:
+                      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                  }
+                })
+                .map(project => {
+                  const projectTasks = tasks.filter(task => task.project_id === project.id);
+                  return (
+                    <ProjectCard key={project.id} project={project} tasks={projectTasks} />
+                  );
+                })}
+            </div>
+          </>
         )}
       </div>
     );

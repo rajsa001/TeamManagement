@@ -12,6 +12,8 @@ interface DailyTaskFormProps {
   onSubmit: (taskData: Omit<DailyTask, 'id' | 'created_at' | 'updated_at' | 'user' | 'created_by_user'>) => Promise<void>;
   task?: DailyTask | null;
   members: Member[];
+  admins?: Admin[];
+  projectManagers?: any[];
   currentUserId: string;
   isAdmin?: boolean;
 }
@@ -22,6 +24,8 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   onSubmit,
   task,
   members,
+  admins = [],
+  projectManagers = [],
   currentUserId,
   isAdmin = false
 }) => {
@@ -39,7 +43,6 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   const [urlInput, setUrlInput] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [admins, setAdmins] = useState<Admin[]>([]);
   const [adminsLoading, setAdminsLoading] = useState(false);
   const [adminsError, setAdminsError] = useState('');
 
@@ -68,25 +71,7 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   }, [task, currentUserId, isAdmin, members]);
 
   // Fetch admins when component mounts or when isAdmin changes
-  useEffect(() => {
-    if (isAdmin) {
-      fetchAdmins();
-    }
-  }, [isAdmin]);
 
-  const fetchAdmins = async () => {
-    setAdminsLoading(true);
-    setAdminsError('');
-    try {
-      const adminsData = await authService.getAdmins();
-      setAdmins(adminsData);
-    } catch (error) {
-      console.error('Error fetching admins:', error);
-      setAdminsError('Failed to fetch admins');
-    } finally {
-      setAdminsLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,6 +253,15 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
                     {admins.map((admin) => (
                       <option key={admin.id} value={admin.id}>
                         {admin.name} ({admin.email}) - Admin
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {projectManagers.length > 0 && (
+                  <optgroup label="Project Managers">
+                    {projectManagers.map((pm) => (
+                      <option key={pm.id} value={pm.id}>
+                        {pm.name} ({pm.email}) - Project Manager
                       </option>
                     ))}
                   </optgroup>

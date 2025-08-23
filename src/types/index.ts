@@ -20,7 +20,19 @@ export interface Admin {
   updated_at: string;
 }
 
-export type User = Member | Admin;
+export interface ProjectManager {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  department?: string;
+  hire_date?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type User = Member | Admin | ProjectManager;
 
 export interface Project {
   id: string;
@@ -29,6 +41,7 @@ export interface Project {
   client_name?: string;
   start_date?: string;
   expected_end_date?: string;
+  status?: 'active' | 'completed' | 'on_hold' | 'cancelled';
   created_at: string;
   updated_at: string;
 }
@@ -82,11 +95,11 @@ export interface Leave {
 }
 
 export interface AuthContextType {
-  user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | null;
-  login: (email: string, password: string, role: 'admin' | 'member') => Promise<void>;
+  user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | (ProjectManager & { role: 'project_manager' }) | null;
+  login: (email: string, password: string, role: 'admin' | 'member' | 'project_manager') => Promise<void>;
   logout: () => void;
   loading: boolean;
-  setUser: (user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | null) => void;
+  setUser: (user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | (ProjectManager & { role: 'project_manager' }) | null) => void;
 }
 
 export interface TaskFilters {
@@ -97,6 +110,7 @@ export interface TaskFilters {
   search?: string;
   assignedTo?: string;
   project?: string;
+  userId?: string;
 }
 
 export interface LeaveFilters {

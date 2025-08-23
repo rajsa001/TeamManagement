@@ -73,9 +73,14 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
   };
 
   const handleDateClick = (day: number) => {
-    // First check if there are any approved leaves for this day
+    // Check if there are any approved or pending leaves for this day
     const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const leavesForDay = leaves.filter(leave => {
+      // Only consider approved or pending leaves
+      if (leave.status !== 'approved' && leave.status !== 'pending') {
+        return false;
+      }
+      
       if (leave.category === 'multi-day') {
         if (leave.from_date && leave.to_date) {
           const from = new Date(leave.from_date);
@@ -95,7 +100,7 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
     // Check if this day is a holiday
     const holidayForDay = getHolidayForDate(day);
     
-    // Block if there are ANY leaves for this day (regardless of status) OR if it's a holiday
+    // Block if there are approved/pending leaves for this day OR if it's a holiday
     if (leavesForDay.length > 0 || holidayForDay) {
       return;
     }
@@ -201,9 +206,14 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
             return <div key={index} className="p-2 h-20" />;
           }
 
-          // Find all leaves for this day (single and multi-day)
+          // Find all leaves for this day (single and multi-day) - only show approved leaves in calendar
           const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const leavesForDay = leaves.filter(leave => {
+            // Only show approved leaves in the calendar view
+            if (leave.status !== 'approved') {
+              return false;
+            }
+            
             if (leave.category === 'multi-day') {
               if (!leave.from_date || !leave.to_date) return false;
               const from = new Date(leave.from_date);
@@ -236,9 +246,7 @@ const LeaveCalendar: React.FC<LeaveCalendarProps> = ({
                 p-2 h-20 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors
                 ${isToday ? 'bg-blue-50 border-blue-300' : ''}
                 ${holidayForDay ? 'bg-red-100 border-red-400' : ''}
-                ${leavesForDay.some(l => l.status === 'approved') ? 'bg-green-50 border-green-300' : ''}
-                ${leavesForDay.some(l => l.status === 'rejected') ? 'bg-red-50 border-red-300 hover:bg-red-100' : ''}
-                ${leavesForDay.some(l => l.status === 'pending') ? 'bg-yellow-50 border-yellow-300' : ''}
+                ${leavesForDay.length > 0 ? 'bg-green-50 border-green-300' : ''}
                 ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
               `}
               onClick={() => !isDisabled && handleDateClick(day)}

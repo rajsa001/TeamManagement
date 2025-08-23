@@ -28,8 +28,10 @@ export function useProjects() {
     try {
       const newProject = await projectService.createProject(projectData);
       setProjects(prev => [newProject, ...prev]);
+      return newProject;
     } catch (err) {
       setError('Failed to create project');
+      throw err;
     }
   };
 

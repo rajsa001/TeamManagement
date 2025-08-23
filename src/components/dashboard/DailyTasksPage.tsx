@@ -14,6 +14,7 @@ export const DailyTasksPage: React.FC = () => {
   const [filters, setFilters] = useState<DailyTaskFilters>({});
   const [members, setMembers] = useState<Member[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
+  const [projectManagers, setProjectManagers] = useState<any[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -37,18 +38,20 @@ export const DailyTasksPage: React.FC = () => {
 
   const fetchMembersAndAdmins = async () => {
     try {
-      const [membersData, adminsData] = await Promise.all([
+      const [membersData, adminsData, projectManagersData] = await Promise.all([
         supabase
           .from('members')
           .select('id, name, email')
           .eq('is_active', true)
           .order('name'),
-        authService.getAdmins()
+        authService.getAdmins(),
+        authService.getProjectManagers()
       ]);
 
       if (membersData.error) throw membersData.error;
       setMembers(membersData.data || []);
       setAdmins(adminsData);
+      setProjectManagers(projectManagersData);
     } catch (error) {
       console.error('Error fetching members and admins:', error);
     }
@@ -126,15 +129,18 @@ export const DailyTasksPage: React.FC = () => {
   const statusCounts = getStatusCounts();
 
   return (
-    <div className="p-6">
+          <div className="p-6">
              <div className="flex justify-between items-center mb-6">
          <div>
-           <h1 className="text-2xl font-bold text-gray-900">Daily Tasks</h1>
+           <h1 className="text-2xl font-bold text-gray-900">Daily Task Command Center</h1>
            <p className="text-gray-600">Manage daily tasks for team members</p>
-           <div className="flex items-center mt-1">
+           <div className="flex items-center mt-1 space-x-4">
              <div className={`w-2 h-2 rounded-full mr-2 ${realtimeConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
              <span className={`text-xs ${realtimeConnected ? 'text-green-600' : 'text-gray-500'}`}>
                {realtimeConnected ? 'Real-time updates enabled' : 'Connecting...'}
+             </span>
+             <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+               {tasks.length} total tasks
              </span>
            </div>
          </div>
@@ -272,24 +278,28 @@ export const DailyTasksPage: React.FC = () => {
       )}
 
       {/* Forms */}
-             <DailyTaskForm
-         isOpen={isFormOpen}
-         onClose={() => setIsFormOpen(false)}
-         onSubmit={handleCreateTask}
-         members={members}
-         currentUserId={user?.id || ''}
-         isAdmin={true}
-       />
+                          <DailyTaskForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onSubmit={handleCreateTask}
+        members={members}
+        admins={admins}
+        projectManagers={projectManagers}
+        currentUserId={user?.id || ''}
+        isAdmin={true}
+      />
 
-       <DailyTaskForm
-         isOpen={!!editingTask}
-         onClose={() => setEditingTask(null)}
-         onSubmit={handleUpdateTask}
-         task={editingTask}
-         members={members}
-         currentUserId={user?.id || ''}
-         isAdmin={true}
-       />
+      <DailyTaskForm
+        isOpen={!!editingTask}
+        onClose={() => setEditingTask(null)}
+        onSubmit={handleUpdateTask}
+        task={editingTask}
+        members={members}
+        admins={admins}
+        projectManagers={projectManagers}
+        currentUserId={user?.id || ''}
+        isAdmin={true}
+      />
     </div>
   );
 };

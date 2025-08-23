@@ -3,17 +3,18 @@ import { User, Mail, Phone, Building, Calendar } from 'lucide-react';
 import { authService } from '../../services/auth';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
-import { Member } from '../../types';
+import { Member, ProjectManager } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface MemberFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  initialData?: Partial<Member>;
+  initialData?: Partial<Member> | Partial<ProjectManager>;
+  isProjectManager?: boolean;
 }
 
-const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, initialData }) => {
+const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, initialData, isProjectManager = false }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -25,6 +26,8 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, ini
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { user } = useAuth();
+
+  // Use the prop to determine if this is for a Project Manager
 
   useEffect(() => {
     if (initialData) {
@@ -60,9 +63,18 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, ini
         const updates: any = { ...formData };
         delete updates.password;
         if (!formData.password) delete updates.password;
-        await authService.updateMember(initialData.id, updates, user && user.role === 'admin' ? { id: user.id, name: user.name } : undefined);
+        
+        if (isProjectManager) {
+          await authService.updateProjectManager(initialData.id, updates);
+        } else {
+          await authService.updateMember(initialData.id, updates, user && user.role === 'admin' ? { id: user.id, name: user.name } : undefined);
+        }
       } else {
-        await authService.createMember(formData);
+        if (isProjectManager) {
+          await authService.createProjectManager(formData);
+        } else {
+          await authService.createMember(formData);
+        }
       }
       onSuccess();
       onClose();
@@ -92,7 +104,15 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, ini
   ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Team Member' : 'Add New Team Member'} size="lg">
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      title={isEdit 
+        ? `Edit ${isProjectManager ? 'Project Manager' : 'Team Member'}` 
+        : `Add New ${isProjectManager ? 'Project Manager' : 'Team Member'}`
+      } 
+      size="lg"
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

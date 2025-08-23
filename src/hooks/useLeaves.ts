@@ -17,8 +17,8 @@ export const useLeaves = () => {
       setLoading(true);
       let query = supabase
         .from('leaves')
-        .select('*, user:members!user_id(*)'); // Join member data
-      if (user?.role !== 'admin') {
+        .select('*'); // Don't join member data, we'll fetch user data manually
+      if (user?.role !== 'admin' && user?.role !== 'project_manager') {
         query = query.eq('user_id', user?.id);
       }
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -26,7 +26,46 @@ export const useLeaves = () => {
         console.error('Error fetching leaves:', error);
         if (isMounted) setLeaves([]);
       } else {
-        if (isMounted) setLeaves(data || []);
+        // Manually fetch user data for each leave
+        const leavesWithUsers = await Promise.all((data || []).map(async (leave) => {
+          // Try to find user in members table first
+          let { data: memberUser, error: memberError } = await supabase
+            .from('members')
+            .select('id, name, email')
+            .eq('id', leave.user_id)
+            .maybeSingle();
+          
+          // If not found in members, try admins table
+          if (!memberUser && !memberError) {
+            let { data: adminUser, error: adminError } = await supabase
+              .from('admins')
+              .select('id, name, email')
+              .eq('id', leave.user_id)
+              .maybeSingle();
+            if (!adminError) {
+              memberUser = adminUser;
+            }
+          }
+          
+          // If not found in admins, try project managers table
+          if (!memberUser) {
+            let { data: pmUser, error: pmError } = await supabase
+              .from('project_managers')
+              .select('id, name, email')
+              .eq('id', leave.user_id)
+              .maybeSingle();
+            if (!pmError) {
+              memberUser = pmUser;
+            }
+          }
+          
+          return {
+            ...leave,
+            user: memberUser
+          };
+        }));
+        
+        if (isMounted) setLeaves(leavesWithUsers);
       }
       if (isMounted) setLoading(false);
     };
@@ -101,14 +140,42 @@ export const useLeaves = () => {
     leaveData?: any,
     payload?: any
   ) => {
-    // 1. Get member's leave balance for current year
+    // 1. Get user's leave balance for current year (check both members and project managers)
     const year = new Date().getFullYear();
-    const { data: balance, error: balanceError } = await supabase
-      .from('member_leave_balances')
-      .select('sick_leaves, casual_leaves, paid_leaves')
-      .eq('member_id', userId)
-      .eq('year', year)
-      .single();
+    
+         // First try to find balance for member
+     let { data: balance, error: balanceError } = await supabase
+       .from('member_leave_balances')
+       .select('sick_leaves, casual_leaves, paid_leaves')
+       .eq('member_id', userId)
+       .eq('year', year)
+       .single();
+
+     // If not found as member, try as admin
+     if (balanceError || !balance) {
+       const { data: adminBalance, error: adminBalanceError } = await supabase
+         .from('member_leave_balances')
+         .select('sick_leaves, casual_leaves, paid_leaves')
+         .eq('admin_id', userId)
+         .eq('year', year)
+         .single();
+       
+       balance = adminBalance;
+       balanceError = adminBalanceError;
+     }
+
+     // If not found as admin, try as project manager
+     if (balanceError || !balance) {
+       const { data: pmBalance, error: pmBalanceError } = await supabase
+         .from('member_leave_balances')
+         .select('sick_leaves, casual_leaves, paid_leaves')
+         .eq('project_manager_id', userId)
+         .eq('year', year)
+         .single();
+       
+       balance = pmBalance;
+       balanceError = pmBalanceError;
+     }
 
     if (balanceError || !balance) {
       console.error('Error fetching leave balance:', balanceError);
@@ -320,7 +387,48 @@ export const useLeaves = () => {
       return false;
     }
     if (data) {
-      setLeaves(prev => [data, ...prev]);
+      // Manually fetch user data for the new leave
+      let userData = null;
+      
+      // Try to find user in members table first
+      let { data: memberUser, error: memberError } = await supabase
+        .from('members')
+        .select('id, name, email')
+        .eq('id', data.user_id)
+        .maybeSingle();
+      
+      // If not found in members, try admins table
+      if (!memberUser && !memberError) {
+        let { data: adminUser, error: adminError } = await supabase
+          .from('admins')
+          .select('id, name, email')
+          .eq('id', data.user_id)
+          .maybeSingle();
+        if (!adminError) {
+          userData = adminUser;
+        }
+      } else {
+        userData = memberUser;
+      }
+      
+      // If not found in admins, try project managers table
+      if (!userData) {
+        let { data: pmUser, error: pmError } = await supabase
+          .from('project_managers')
+          .select('id, name, email')
+          .eq('id', data.user_id)
+          .maybeSingle();
+        if (!pmError) {
+          userData = pmUser;
+        }
+      }
+
+      const newLeave = {
+        ...data,
+        user: userData
+      };
+
+      setLeaves(prev => [newLeave, ...prev]);
       // Send webhook to n8n automation for leave added (to both URLs)
       try {
         await fetch('https://n8nautomation.site/webhook-test/onLeaveAdded', {
@@ -445,9 +553,12 @@ export const useLeaves = () => {
       throw new Error('Cannot apply for leave only on Sundays.');
     }
 
+    // Check if this is only a status update
+    const isOnlyStatusUpdate = Object.keys(updates).length === 1 && updates.hasOwnProperty('status');
+    
     // Check leave balance before updating
     // Only check if the user is the leave owner and not just updating status
-    const isOnlyStatusUpdate = Object.keys(updates).length === 1 && Object.keys(updates)[0] === 'status';
+    // For admin approval, skip this check as the balance will be deducted by the database trigger
     if (updates.leave_type && !isOnlyStatusUpdate && user?.id === updates.user_id) {
       try {
         await checkLeaveBalance(user.id, updates.leave_type, daysRequested, id, updates, updates);
@@ -455,9 +566,12 @@ export const useLeaves = () => {
         throw error;
       }
     }
-
-    // Ensure dates are properly formatted
-    const payload = {
+    
+    // Ensure dates are properly formatted (only if not just status update)
+    const payload = isOnlyStatusUpdate ? {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    } : {
       ...updates,
       leave_date: updates.category === 'multi-day' ? null : updates.leave_date,
       from_date: updates.from_date && updates.from_date !== '' ? updates.from_date : null,
@@ -466,11 +580,12 @@ export const useLeaves = () => {
       updated_at: new Date().toISOString(),
     };
 
-    console.log('Updating leave with payload:', { id, payload });
+    console.log('Updating leave with payload:', { id, payload, isOnlyStatusUpdate });
 
-    // Check for date conflicts before updating
+    // Check for date conflicts before updating (only if not just status update)
+    // Skip for admin approval as they're just changing status
     let conflict = false;
-    if (user?.id) {
+    if (user?.id && !isOnlyStatusUpdate && user?.id === updates.user_id) {
       if (payload.category === 'multi-day') {
         // Check for overlap with any other leave (not rejected, not this leave)
         const { data: otherLeaves, error: fetchError } = await supabase
@@ -536,16 +651,44 @@ export const useLeaves = () => {
       throw new Error('Date already booked for another leave.');
     }
 
-    // Check leave balance before updating
-    if (user?.id && payload.leave_type) {
-      // Fetch leave balance for this user and year
+    // Check leave balance before updating (only if not just status update)
+    if (user?.id && payload.leave_type && !isOnlyStatusUpdate) {
+      // Fetch leave balance for this user and year (supports both members and project managers)
       const year = new Date().getFullYear();
-      const { data: balances, error: balanceError } = await supabase
-        .from('member_leave_balances')
-        .select('*')
-        .eq('member_id', user.id)
-        .eq('year', year)
-        .single();
+      
+             // First try to find balance for member
+       let { data: balances, error: balanceError } = await supabase
+         .from('member_leave_balances')
+         .select('*')
+         .eq('member_id', user.id)
+         .eq('year', year)
+         .single();
+
+       // If not found as member, try as admin
+       if (balanceError || !balances) {
+         const { data: adminBalances, error: adminBalanceError } = await supabase
+           .from('member_leave_balances')
+           .select('*')
+           .eq('admin_id', user.id)
+           .eq('year', year)
+           .single();
+         
+         balances = adminBalances;
+         balanceError = adminBalanceError;
+       }
+
+       // If not found as admin, try as project manager
+       if (balanceError || !balances) {
+         const { data: pmBalances, error: pmBalanceError } = await supabase
+           .from('member_leave_balances')
+           .select('*')
+           .eq('project_manager_id', user.id)
+           .eq('year', year)
+           .single();
+         
+         balances = pmBalances;
+         balanceError = pmBalanceError;
+       }
 
       if (!balanceError && balances) {
         // Calculate days requested in this update
@@ -611,7 +754,7 @@ export const useLeaves = () => {
       .from('leaves')
       .update(payload)
       .eq('id', id)
-      .select('*, user:members!user_id(*)')
+      .select('*')
       .single();
 
     if (error) {
@@ -624,8 +767,49 @@ export const useLeaves = () => {
       throw new Error('Leave not found');
     }
 
+    // Manually fetch user data
+    let userData = null;
+    
+    // Try to find user in members table first
+    let { data: memberUser, error: memberError } = await supabase
+      .from('members')
+      .select('id, name, email')
+      .eq('id', data.user_id)
+      .maybeSingle();
+    
+    // If not found in members, try admins table
+    if (!memberUser && !memberError) {
+      let { data: adminUser, error: adminError } = await supabase
+        .from('admins')
+        .select('id, name, email')
+        .eq('id', data.user_id)
+        .maybeSingle();
+      if (!adminError) {
+        userData = adminUser;
+      }
+    } else {
+      userData = memberUser;
+    }
+    
+    // If not found in admins, try project managers table
+    if (!userData) {
+      let { data: pmUser, error: pmError } = await supabase
+        .from('project_managers')
+        .select('id, name, email')
+        .eq('id', data.user_id)
+        .maybeSingle();
+      if (!pmError) {
+        userData = pmUser;
+      }
+    }
+
+    const updatedLeave = {
+      ...data,
+      user: userData
+    };
+
     // Update local state
-    setLeaves(prev => prev.map(leave => (leave.id === id ? { ...leave, ...data } : leave)));
+    setLeaves(prev => prev.map(leave => (leave.id === id ? updatedLeave : leave)));
 
     // Send webhook to n8n automation for leave updated
     try {
@@ -649,7 +833,7 @@ export const useLeaves = () => {
       duration: 4000,
     });
 
-    return data;
+    return updatedLeave;
   };
 
   const deleteLeave = async (id: string) => {

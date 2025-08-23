@@ -1,18 +1,25 @@
 import { supabase } from '../lib/supabase';
-import { Member, Admin } from '../types';
+import { Member, Admin, ProjectManager } from '../types';
 
 export interface LoginResponse {
-  user: (Member & { role: 'member' }) | (Admin & { role: 'admin' });
+  user: (Member & { role: 'member' }) | (Admin & { role: 'admin' }) | (ProjectManager & { role: 'project_manager' });
   token: string;
 }
 
 export const authService = {
-  async loginUser(email: string, password: string, role: 'admin' | 'member'): Promise<LoginResponse> {
+  async loginUser(email: string, password: string, role: 'admin' | 'member' | 'project_manager'): Promise<LoginResponse> {
     try {
       let user, error;
       if (role === 'admin') {
         ({ data: user, error } = await supabase
           .from('admins')
+          .select('*')
+          .eq('email', email)
+          .eq('is_active', true)
+          .single());
+      } else if (role === 'project_manager') {
+        ({ data: user, error } = await supabase
+          .from('project_managers')
           .select('*')
           .eq('email', email)
           .eq('is_active', true)
@@ -218,13 +225,24 @@ export const authService = {
   // Add password verification for admin
   async verifyAdminPassword(adminId: string, password: string): Promise<boolean> {
     // In production, use bcrypt.compare
+    console.log('[DEBUG] verifyAdminPassword called with:', { adminId, password });
     const { data: admin, error } = await supabase
       .from('admins')
       .select('password_hash')
       .eq('id', adminId)
       .single();
-    if (error || !admin) return false;
-    return admin.password_hash === btoa(password);
+    console.log('[DEBUG] Admin query result:', { admin, error });
+    if (error || !admin) {
+      console.log('[DEBUG] Admin not found or error:', error);
+      return false;
+    }
+    const hashedPassword = btoa(password);
+    console.log('[DEBUG] Password comparison:', { 
+      storedHash: admin.password_hash, 
+      computedHash: hashedPassword, 
+      match: admin.password_hash === hashedPassword 
+    });
+    return admin.password_hash === hashedPassword;
   },
 
   validateToken(token: string): boolean {
@@ -236,7 +254,7 @@ export const authService = {
     }
   },
 
-  getTokenData(token: string): { id: string; role: 'admin' | 'member' } | null {
+  getTokenData(token: string): { id: string; role: 'admin' | 'member' | 'project_manager' } | null {
     try {
       const decoded = JSON.parse(atob(token));
       if (decoded.exp > Date.now()) {
@@ -246,5 +264,77 @@ export const authService = {
     } catch {
       return null;
     }
+  },
+
+  async getProjectManagers(): Promise<ProjectManager[]> {
+    try {
+      const { data: projectManagers, error } = await supabase
+        .from('project_managers')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (error) {
+        throw new Error('Failed to fetch project managers');
+      }
+      return projectManagers || [];
+    } catch (error) {
+      throw new Error('Failed to fetch project managers');
+    }
+  },
+
+  async createProjectManager(pmData: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    department?: string;
+    hire_date?: string;
+  }): Promise<ProjectManager> {
+    try {
+      const password_hash = btoa(pmData.password); // Simple encoding for demo
+      const { data: projectManager, error } = await supabase
+        .from('project_managers')
+        .insert({
+          name: pmData.name,
+          email: pmData.email,
+          password_hash,
+          phone: pmData.phone,
+          department: pmData.department,
+          hire_date: pmData.hire_date,
+        })
+        .select()
+        .single();
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('Email already exists');
+        }
+        throw new Error('Failed to create project manager');
+      }
+      return projectManager;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to create project manager');
+    }
+  },
+
+  async updateProjectManager(id: string, updates: Partial<ProjectManager>): Promise<ProjectManager> {
+    const { data, error } = await supabase
+      .from('project_managers')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new Error('Failed to update project manager');
+    return data;
+  },
+
+  async deleteProjectManager(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('project_managers')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error('Failed to delete project manager');
   }
 };

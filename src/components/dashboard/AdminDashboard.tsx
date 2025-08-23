@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Modal from '../ui/Modal';
 import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
@@ -9,10 +9,12 @@ import Card from '../ui/Card';
 import TaskCard from './TaskCard';
 import TaskForm from './TaskForm';
 import TaskFiltersComponent from './TaskFilters';
+import ProjectFiltersComponent from './ProjectFilters';
 import LeaveCalendar from './LeaveCalendar';
 import DashboardStats from './DashboardStats';
 import MembersList from './MembersList';
 import AdminsList from './AdminsList';
+import ProjectManagerManagement from './ProjectManagerManagement';
 import { useAuth } from '../../contexts/AuthContext';
 import ProjectCard from './ProjectCard';
 import { useProjects } from '../../hooks/useProjects';
@@ -26,6 +28,9 @@ import { toast } from 'sonner';
 import LeaveForm from './LeaveForm';
 import HolidayCalendar from './HolidayCalendar';
 import { DailyTasksPage } from './DailyTasksPage';
+import TaskViewSelector, { TaskViewType } from './TaskViewSelector';
+import TaskListView from './TaskListView';
+import TaskCalendarView from './TaskCalendarView';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -34,22 +39,35 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   // All hooks at the top
   const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
+
+
+
+
   const { leaves, loading: leavesLoading, addLeave, deleteLeave, updateLeave, setLeaves } = useLeaves();
   const { projects, loading: projectsLoading, error: projectsError, addProject, updateProject, deleteProject, fetchProjects } = useProjects();
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
+  const [taskView, setTaskView] = useState<TaskViewType>('grid');
+  const [projectFilters, setProjectFilters] = useState({
+    search: '',
+    status: '',
+    client: '',
+    projectManager: '',
+    dateSort: 'newest'
+  });
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [projectForm, setProjectForm] = useState({
     name: '',
     description: '',
     client_name: '',
     start_date: '',
-    expected_end_date: ''
+    expected_end_date: '',
+    project_manager_id: ''
   });
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const { user } = useAuth();
-  const isSuperAdmin = user?.email === 'mmandviya93@gmail.com';
+  const isSuperAdmin = useMemo(() => user?.email === 'contact.tasknova@gmail.com', [user?.email]);
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
@@ -66,13 +84,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
   const [editProjectForm, setEditProjectForm] = useState({
     name: '',
     description: '',
-});
+    client_name: '',
+    start_date: '',
+    expected_end_date: '',
+    status: 'active'
+  });
 
 // --- Holiday Add Handler ---
 const handleAddHoliday = async (holidayData: { name: string; date: string; description?: string }) => {
   try {
     const { data, error } = await supabase
-      .from('holidays')
+      .from('company_holidays')
       .insert([{ ...holidayData, is_recurring: false }])
       .select();
     if (error) throw error;
@@ -89,7 +111,7 @@ const handleAddHoliday = async (holidayData: { name: string; date: string; descr
 const handleUpdateHoliday = async (holidayData: { id: string; name: string; date: string; description?: string }) => {
   try {
     const { data, error } = await supabase
-      .from('holidays')
+      .from('company_holidays')
       .update({ name: holidayData.name, date: holidayData.date, description: holidayData.description })
       .eq('id', holidayData.id)
       .select();
@@ -107,7 +129,7 @@ const handleUpdateHoliday = async (holidayData: { id: string; name: string; date
 const handleDeleteHoliday = async (holidayId: string) => {
   try {
     const { error } = await supabase
-      .from('holidays')
+      .from('company_holidays')
       .delete()
       .eq('id', holidayId);
     if (error) throw error;
@@ -119,6 +141,8 @@ const handleDeleteHoliday = async (holidayId: string) => {
 };
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [admins, setAdmins] = useState<{ id: string; name: string }[]>([]);
+  const [projectManagers, setProjectManagers] = useState<{ id: string; name: string }[]>([]);
+  const [projectManagerAssignments, setProjectManagerAssignments] = useState<Array<{ project_id: string; project_manager_id: string }>>([]);
   const [openSections, setOpenSections] = useState({
     recentlyCompleted: false,
     dueToday: false,
@@ -129,6 +153,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
   const [showLeave, setShowLeave] = useState(false);
 
   const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
+  const [pmLeaveBalances, setPmLeaveBalances] = useState<any[]>([]);
   const [leaveBalancesLoading, setLeaveBalancesLoading] = useState(true);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   // State for editing balances
@@ -184,7 +209,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
       };
       fetchDefaults();
     }
-    if (activeTab === 'holidays') {
+    if (activeTab === 'holidays' || activeTab === 'leaves') {
       const fetchHolidays = async () => {
         setHolidaysLoading(true);
         const { data, error } = await supabase
@@ -205,20 +230,42 @@ const handleDeleteHoliday = async (holidayId: string) => {
   useEffect(() => {
     let isMounted = true;
     const fetchMembersAndAdmins = async () => {
-      const [membersData, adminsData] = await Promise.all([
+      const [membersData, adminsData, projectManagersData] = await Promise.all([
         authService.getMembers(),
-        authService.getAdmins()
+        authService.getAdmins(),
+        authService.getProjectManagers()
       ]);
       if (isMounted) {
         setMembers(membersData.map(m => ({ id: m.id, name: m.name })));
         setAdmins(adminsData.map(a => ({ id: a.id, name: a.name })));
+        setProjectManagers(projectManagersData.map(pm => ({ id: pm.id, name: pm.name })));
       }
     };
     fetchMembersAndAdmins();
-    const interval = setInterval(fetchMembersAndAdmins, 5000); // Poll every 5 seconds
+    // Remove the interval to prevent continuous refresh
+    // const interval = setInterval(fetchMembersAndAdmins, 5000); // Poll every 5 seconds
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      // clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchProjectManagerAssignments = async () => {
+      const { data, error } = await supabase
+        .from('project_manager_assignments')
+        .select('project_id, project_manager_id')
+        .eq('is_active', true);
+      if (error) {
+        console.error('Error fetching project manager assignments:', error);
+      } else if (data && isMounted) {
+        setProjectManagerAssignments(data);
+      }
+    };
+    fetchProjectManagerAssignments();
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -226,31 +273,78 @@ const handleDeleteHoliday = async (holidayId: string) => {
     if (activeTab === 'leave-defaults' && isSuperAdmin) {
       setLeaveBalancesLoading(true);
       const fetchBalances = async () => {
-        const res = await supabase.from('member_leave_balances').select('*');
-        setLeaveBalances(res.data || []);
+        // Fetch both member and PM leave balances
+        const [memberRes, pmRes] = await Promise.all([
+          supabase.from('member_leave_balances').select('*'),
+          supabase.from('project_manager_leave_balances').select('*')
+        ]);
+        
+        setLeaveBalances(memberRes.data || []);
+        setPmLeaveBalances(pmRes.data || []);
         setLeaveBalancesLoading(false);
-        console.log('Fetched leave balances:', res.data);
       };
       fetchBalances();
     }
-  }, [leaves, activeTab, isSuperAdmin]);
+  }, [activeTab, isSuperAdmin]);
 
   useEffect(() => {
     let isMounted = true;
     const fetchLeaves = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('leaves')
-        .select('*, user:members!user_id(*)');
-      if (isMounted && data) {
-        // Use the same structure as useLeaves
-        setLeaves(data);
+        .select('*');
+      if (error) {
+        console.error('Error fetching leaves:', error);
+        if (isMounted) setLeaves([]);
+      } else if (data) {
+        // Manually fetch user data for each leave
+        const leavesWithUsers = await Promise.all(data.map(async (leave) => {
+          // Try to find user in members table first
+          let { data: memberUser, error: memberError } = await supabase
+            .from('members')
+            .select('id, name, email')
+            .eq('id', leave.user_id)
+            .maybeSingle();
+          
+          // If not found in members, try admins table
+          if (!memberUser && !memberError) {
+            let { data: adminUser, error: adminError } = await supabase
+              .from('admins')
+              .select('id, name, email')
+              .eq('id', leave.user_id)
+              .maybeSingle();
+            if (!adminError) {
+              memberUser = adminUser;
+            }
+          }
+          
+          // If not found in admins, try project managers table
+          if (!memberUser) {
+            let { data: pmUser, error: pmError } = await supabase
+              .from('project_managers')
+              .select('id, name, email')
+              .eq('id', leave.user_id)
+              .maybeSingle();
+            if (!pmError) {
+              memberUser = pmUser;
+            }
+          }
+          
+          return {
+            ...leave,
+            user: memberUser
+          };
+        }));
+        
+        if (isMounted) setLeaves(leavesWithUsers);
       }
     };
     fetchLeaves();
-    const interval = setInterval(fetchLeaves, 5000); // Poll every 5 seconds
+    // Remove the interval to prevent continuous refresh
+    // const interval = setInterval(fetchLeaves, 5000); // Poll every 5 seconds
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      // clearInterval(interval);
     };
   }, []);
 
@@ -274,7 +368,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user?.role, refetchTasks]);
 
   // Initialize chat popup for admin dashboard
   useEffect(() => {
@@ -452,9 +546,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
   useEffect(() => {
     fetchAdminNotifications();
     // Remove polling since we have real-time subscription
-    if (!user || user.role !== 'admin') return;
-    
-    console.log('[DEBUG] Setting up notifications channel for admin:', user.id);
+    if (!user || user.role !== 'admin' || !user.id) return;
     
     // Create a Set to track shown notifications and prevent duplicates
     const shownNotifications = new Set();
@@ -469,8 +561,6 @@ const handleDeleteHoliday = async (holidayId: string) => {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('[DEBUG] Admin received realtime notification:', payload);
-          
           // Check if we've already shown this notification
           if (payload.new && !shownNotifications.has(payload.new.id)) {
             shownNotifications.add(payload.new.id);
@@ -499,10 +589,9 @@ const handleDeleteHoliday = async (holidayId: string) => {
       });
     
     return () => {
-      console.log('[DEBUG] Cleaning up notifications channel for admin');
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user?.id, user?.role]);
 
   // Fetch notifications when switching to notifications tab
   useEffect(() => {
@@ -540,7 +629,6 @@ const handleDeleteHoliday = async (holidayId: string) => {
     // --- Insert notification for member if status is updated by admin ---
     if (updates.status && user?.role === 'admin' && updated && updated.user_id) {
       // Prevent duplicate notification
-      console.log('ADMIN: Inserting notification for member', updated.user_id, id, updates.status);
       const { data: existing, error: existingError } = await supabase
         .from('notifications')
         .select('id')
@@ -654,8 +742,8 @@ const handleDeleteHoliday = async (holidayId: string) => {
       alert(`Leave is already ${status}.`);
       return;
     }
-    // Update leave status, but keep all other fields
-    await updateLeave(leaveId, { ...leave, status });
+    // Update leave status only - don't pass the full leave object
+    await updateLeave(leaveId, { status });
 
     // Fetch the leave again to confirm status
     const { data: updatedLeave, error: updatedLeaveError } = await supabase
@@ -667,7 +755,6 @@ const handleDeleteHoliday = async (holidayId: string) => {
       alert('Failed to fetch leave after approval.');
       return;
     }
-    console.log('[LEAVE APPROVAL DEBUG]', { prevStatus, newStatus: updatedLeave.status });
 
     // --- REMOVED: Balance update code. Now handled by DB trigger. ---
 
@@ -746,7 +833,8 @@ const handleDeleteHoliday = async (holidayId: string) => {
       description: project.description || '',
       client_name: project.client_name || '',
       start_date: project.start_date || '',
-      expected_end_date: project.expected_end_date || ''
+      expected_end_date: project.expected_end_date || '',
+      status: project.status || 'active'
     });
   };
 
@@ -759,6 +847,11 @@ const handleDeleteHoliday = async (holidayId: string) => {
 
   const handleDeleteProject = async (id: string) => {
     await deleteProject(id);
+  };
+
+  const handleProjectUpdate = (updatedProject: Project) => {
+    // Update the project in the local state
+    fetchProjects();
   };
 
   // Add this function to toggle the open state for each section
@@ -781,7 +874,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
         ) : (
           <>
             <div className="h-80 flex">
-            <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+            <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} members={members} admins={admins} projectManagers={projectManagers} />
             </div>
             {tasks.length > 1 && !openSections[sectionKey] && (
               <button
@@ -796,7 +889,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
                 <div className="space-y-4">
                   {tasks.slice(1).map(task => (
                     <div key={task.id} className="h-80 flex">
-                      <TaskCard task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} />
+                      <TaskCard task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} members={members} admins={admins} projectManagers={projectManagers} />
                     </div>
                   ))}
                 </div>
@@ -885,14 +978,8 @@ const handleDeleteHoliday = async (holidayId: string) => {
 
     return (
       <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
-        {/* Interactive animated greeting at the top */}
-        <div className="flex items-center justify-between pt-4 pb-2">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <span>
-              Hey <span className="text-blue-600 font-extrabold animate-pulse">{adminName}</span>, {getGreeting()} 
-            </span>
-            <span className="animate-waving-hand text-3xl ml-1" role="img" aria-label="wave">👋</span>
-          </h1>
+        {/* Dashboard content starts here */}
+        <div className="pt-4 pb-2">
         </div>
         <DashboardStats tasks={tasks} leaves={leaves} />
         {/* Section title for leaves dashboard */}
@@ -987,53 +1074,129 @@ const handleDeleteHoliday = async (holidayId: string) => {
 
   if (activeTab === 'tasks') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">All Tasks</h1>
-          <Button
-            icon={Plus}
-            onClick={() => setIsTaskFormOpen(true)}
-          >
-            Add Task
-          </Button>
+      <div className="p-6 space-y-6">
+        {/* Header with Add Task button and View Selector */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-gray-800">Task Master Hub</h2>
+            <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {filteredTasks.length} tasks
+            </span>
+          </div>
+          <div className="flex items-center space-x-4">
+            <TaskViewSelector
+              currentView={taskView}
+              onViewChange={setTaskView}
+            />
+            <Button
+              icon={Plus}
+              onClick={() => setIsTaskFormOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Add Task
+            </Button>
+          </div>
         </div>
 
+        {/* Filters Section */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <TaskFiltersComponent
           filters={taskFilters}
           onFiltersChange={setTaskFilters}
           showMemberFilter={true}
           members={members}
           admins={admins}
+          projectManagers={projectManagers}
           projects={projects.map(p => ({ id: p.id, name: p.name }))}
         />
+        </div>
 
+        {/* Error Message */}
         {tasksError && (
-          <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2" />
             {tasksError}
+            </div>
           </div>
         )}
 
+        {/* Loading State */}
         {tasksLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading tasks...</p>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredTasks.map(task => (
-                              <div key={task.id} className="flex h-[28rem]">
-              <TaskCard
-                task={task}
+          /* Task Views */
+          <>
+            {taskView === 'grid' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredTasks.length === 0 ? (
+                  <div className="col-span-full">
+                    <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+                      <CheckSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+                      <p className="text-gray-500 mb-4">No tasks match your current filters.</p>
+                      <Button
+                        onClick={() => setTaskFilters({})}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Clear Filters
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  filteredTasks.map(task => (
+                    <div key={task.id} className="flex h-[28rem]">
+                      <TaskCard
+                        task={task}
+                        onDelete={deleteTask}
+                        onStatusChange={handleStatusChange}
+                        showUser={true}
+                        onUpdate={handleTaskUpdate}
+                        members={members}
+                        admins={admins}
+                        projectManagers={projectManagers}
+                        projects={projects.map(p => ({ id: p.id, name: p.name }))}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {taskView === 'list' && (
+              <TaskListView
+                tasks={filteredTasks}
                 onDelete={deleteTask}
                 onStatusChange={handleStatusChange}
-                showUser={true}
                 onUpdate={handleTaskUpdate}
+                showUser={true}
                 members={members}
                 admins={admins}
+                projectManagers={projectManagers}
                 projects={projects.map(p => ({ id: p.id, name: p.name }))}
               />
-              </div>
-            ))}
-          </div>
+            )}
+
+            {taskView === 'calendar' && (
+              <TaskCalendarView
+                tasks={filteredTasks}
+                onDelete={deleteTask}
+                onStatusChange={handleStatusChange}
+                onUpdate={handleTaskUpdate}
+                showUser={true}
+                members={members}
+                admins={admins}
+                projectManagers={projectManagers}
+                projects={projects.map(p => ({ id: p.id, name: p.name }))}
+              />
+            )}
+          </>
         )}
 
         <TaskForm
@@ -1051,39 +1214,75 @@ const handleDeleteHoliday = async (holidayId: string) => {
     const filteredMyTasks = filterTasks(taskFilters, myTasks);
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">My Tasks</h1>
+      <div className="p-6 space-y-6">
+        {/* Header with Add Task button */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-gray-800">My Task Portfolio</h2>
+            <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {filteredMyTasks.length} tasks
+            </span>
+          </div>
           <Button
             icon={Plus}
             onClick={() => setIsTaskFormOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             Add Task
           </Button>
         </div>
 
-                 <TaskFiltersComponent
-           filters={taskFilters}
-           onFiltersChange={setTaskFilters}
-           showMemberFilter={false}
-           members={members}
-           admins={admins}
-           projects={projects.map(p => ({ id: p.id, name: p.name }))}
+        {/* Filters Section */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                                  <TaskFiltersComponent
+          filters={taskFilters}
+          onFiltersChange={setTaskFilters}
+          showMemberFilter={false}
+          members={members}
+          admins={admins}
+          projectManagers={projectManagers}
+          projects={projects.map(p => ({ id: p.id, name: p.name }))}
          />
+        </div>
 
+        {/* Error Message */}
         {tasksError && (
-          <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2" />
             {tasksError}
+            </div>
           </div>
         )}
 
+        {/* Loading State */}
         {tasksLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-500">Loading tasks...</p>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredMyTasks.map(task => (
+          /* Tasks Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredMyTasks.length === 0 ? (
+              <div className="col-span-full">
+                <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+                  <CheckSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+                  <p className="text-gray-500 mb-4">No tasks match your current filters.</p>
+                  <Button
+                    onClick={() => setTaskFilters({})}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              filteredMyTasks.map(task => (
               <div key={task.id} className="flex h-[28rem]">
                 <TaskCard
                   task={task}
@@ -1093,10 +1292,12 @@ const handleDeleteHoliday = async (holidayId: string) => {
                   onUpdate={handleTaskUpdate}
                   members={members}
                   admins={admins}
+                  projectManagers={projectManagers}
                   projects={projects.map(p => ({ id: p.id, name: p.name }))}
                 />
               </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
@@ -1120,8 +1321,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
     // Pending leaves
     const pendingLeaves = leaves.filter(l => l.status === 'pending');
 
-    // Super-admin check
-    const isSuperAdmin = user?.email === 'mmandviya93@gmail.com';
+    // Super-admin check (using memoized value from component scope)
 
     // Handle balance edit
     const handleEditBalances = (memberId: string, balances: any) => {
@@ -1167,10 +1367,8 @@ const handleDeleteHoliday = async (holidayId: string) => {
     const filteredMembers = members.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()));
 
     return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Team Leaves</h1>
-        </div>
+      <div className="p-6 space-y-8">
+
         {/* Pending Leaves Section (no search/filter) */}
         <div>
           <h2 className="text-lg font-semibold text-gray-800 mb-2">Pending Leaves</h2>
@@ -1347,25 +1545,140 @@ const handleDeleteHoliday = async (holidayId: string) => {
             })}
           </div>
         </div>
+
+        {/* Project Manager Leave Balances Section */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2 mt-8">Project Manager Leave Balances</h2>
+          <div className="space-y-4">
+            {projectManagers.map(pm => {
+              const balances = pmLeaveBalances.find((b: any) => b.project_manager_id === pm.id && b.year === new Date().getFullYear());
+              const pmLeaves = leaves.filter(l => l.user_id === pm.id);
+              return (
+                <Card key={pm.id} className="border border-gray-200 bg-white">
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedMember(expandedMember === pm.id ? null : pm.id)}>
+                    <div className="font-semibold text-gray-900 text-base py-2">{pm.name} (Project Manager)</div>
+                    <Button size="sm" variant="outline">{expandedMember === pm.id ? 'Hide' : 'Show'}</Button>
+                  </div>
+                  {expandedMember === pm.id && (
+                    <div className="p-4 border-t mt-2">
+                      <div className="mb-2 font-medium text-gray-700">Leave Balances ({new Date().getFullYear()}):</div>
+                      {balances ? (
+                        <div className="flex gap-4 items-center mb-4">
+                          {isSuperAdmin && editingBalances[pm.id] ? (
+                            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                              <label className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Sick</span>
+                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[pm.id]?.sick_leaves ?? balances?.sick_leave ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [pm.id]: { ...prev[pm.id], sick_leaves: +e.target.value } }))} />
+                              </label>
+                              <label className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Casual</span>
+                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[pm.id]?.casual_leaves ?? balances?.casual_leave ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [pm.id]: { ...prev[pm.id], casual_leaves: +e.target.value } }))} />
+                              </label>
+                              <label className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Earned</span>
+                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[pm.id]?.paid_leaves ?? balances?.earned_leave ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [pm.id]: { ...prev[pm.id], paid_leaves: +e.target.value } }))} />
+                              </label>
+                              <div className="flex gap-2 ml-2 mt-2 md:mt-0">
+                                <Button size="sm" variant="primary" onClick={async () => {
+                                  setSavingMemberId(pm.id);
+                                  const input = balancesInput[pm.id];
+                                  const { error } = await supabase
+                                    .from('project_manager_leave_balances')
+                                    .upsert({
+                                      project_manager_id: pm.id,
+                                      year: year,
+                                      sick_leave: input.sick_leaves,
+                                      casual_leave: input.casual_leaves,
+                                      earned_leave: input.paid_leaves,
+                                      updated_at: new Date().toISOString(),
+                                    }, { onConflict: 'project_manager_id,year' });
+                                  if (!error) {
+                                    toast('✅ Leave balances updated', { style: { background: '#10b981', color: 'white' }, duration: 3000 });
+                                  } else {
+                                    toast('❌ Failed to update leave balances', { style: { background: '#ef4444', color: 'white' }, duration: 4000 });
+                                  }
+                                  setEditingBalances((prev) => ({ ...prev, [pm.id]: false }));
+                                  setLeaveBalancesLoading(true);
+                                  const [memberRes, pmRes] = await Promise.all([
+                                    supabase.from('member_leave_balances').select('*'),
+                                    supabase.from('project_manager_leave_balances').select('*')
+                                  ]);
+                                  setLeaveBalances(memberRes.data || []);
+                                  setPmLeaveBalances(pmRes.data || []);
+                                  setLeaveBalancesLoading(false);
+                                  setSavingMemberId(null);
+                                }} disabled={savingMemberId === pm.id}>
+                                  {savingMemberId === pm.id ? 'Saving...' : 'Save'}
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingBalances((prev) => ({ ...prev, [pm.id]: false }))} disabled={savingMemberId === pm.id}>Cancel</Button>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-2 w-full">These values override the default for this project manager for the year.</div>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances.sick_leave}</span>
+                              <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances.casual_leave}</span>
+                              <span className="px-2 py-1 bg-green-50 rounded">Earned: {balances.earned_leave}</span>
+                              {isSuperAdmin && (
+                                <Button size="sm" variant="outline" onClick={() => {
+                                  setEditingBalances((prev) => ({ ...prev, [pm.id]: true }));
+                                  setBalancesInput((prev: any) => ({ 
+                                    ...prev, 
+                                    [pm.id]: { 
+                                      sick_leaves: balances.sick_leave, 
+                                      casual_leaves: balances.casual_leave, 
+                                      paid_leaves: balances.earned_leave 
+                                    } 
+                                  }));
+                                }}>Edit</Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-gray-500">No balance record for this year.</div>
+                      )}
+                      <div className="mb-2 font-medium text-gray-700">Leave History:</div>
+                      <div className="space-y-2">
+                        {pmLeaves.length === 0 ? (
+                          <div className="text-gray-500">No leaves found.</div>
+                        ) : (
+                          pmLeaves.map(lv => (
+                            <div key={lv.id} className="border rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50">
+                              <div>
+                                <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${lv.from_date} to ${lv.to_date}` : lv.leave_date}
+                                <span className="ml-2 text-xs">({lv.status})</span>
+                                {lv.approved_by && (lv.status === 'approved' || lv.status === 'rejected') && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {lv.status === 'approved' ? 'Approved' : 'Rejected'} by: {admins.find(a => a.id === lv.approved_by)?.name || 'Unknown Admin'}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500">Reason: {lv.reason}</div>
+                              <Button variant="outline" size="sm" icon={Pencil} onClick={() => { setEditLeave(lv); setEditFormOpen(true); }}>Edit</Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
 
   if (activeTab === 'team') {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Team Members</h1>
-        <MembersList members={members} />
-      </div>
-    );
+    return <MembersList />;
   }
 
   if (activeTab === 'reports') {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
-        </div>
+
         
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
@@ -1410,21 +1723,157 @@ const handleDeleteHoliday = async (holidayId: string) => {
 
   if (activeTab === 'projects') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <Button icon={Plus} onClick={() => setIsProjectFormOpen(true)}>
-            Add Project
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
+        <div className="p-6 space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Projects Hub</h2>
+              <p className="text-gray-600 text-lg">Manage and track all your projects in one place</p>
+              <div className="flex flex-wrap items-center gap-4 mt-3">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>{projects.length} Total Projects</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>{projects.filter(p => p.status === 'completed').length} Completed</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>{projects.filter(p => p.status === 'active').length} Active</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  <span>{projects.filter(p => p.status === 'on_hold').length} On Hold</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  <span>{projects.filter(p => p.status === 'cancelled').length} Cancelled</span>
+                </div>
+              </div>
+            </div>
+            <Button 
+              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 px-6 py-3"
+              onClick={() => setIsProjectFormOpen(true)}
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add New Project
           </Button>
         </div>
-        {projectsError && <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">{projectsError}</div>}
+          {projectsError && (
+            <div className="bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-6 py-4 rounded-xl shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold">Error Loading Projects</h4>
+                  <p className="text-sm">{projectsError}</p>
+                </div>
+              </div>
+            </div>
+          )}
         {projectsLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="text-center py-20">
+              <div className="relative">
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-400 animate-pulse"></div>
+              </div>
+              <p className="text-gray-600 mt-6 text-lg">Loading your projects...</p>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                <Plus className="w-12 h-12 text-blue-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">No projects yet</h3>
+              <p className="text-gray-600 mb-8 max-w-md mx-auto">Start building something amazing! Create your first project to get started with task management.</p>
+              <Button 
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 px-8 py-3"
+                onClick={() => setIsProjectFormOpen(true)}
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Create First Project
+              </Button>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {projects.map(project => {
+            <>
+              {/* Project Filters */}
+              <Card className="border-0 shadow-md bg-white/80 backdrop-blur-sm">
+                <div className="p-6">
+                  <ProjectFiltersComponent
+                    filters={projectFilters}
+                    onFiltersChange={setProjectFilters}
+                    clients={[...new Set(projects.map(p => p.client_name).filter(Boolean))]}
+                    projectManagers={projectManagers}
+                  />
+                </div>
+              </Card>
+
+              {/* Filtered Projects Grid */}
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {projects
+                  .filter(project => {
+                    // Search filter
+                    if (projectFilters.search) {
+                      const searchTerm = projectFilters.search.toLowerCase();
+                      const matchesName = project.name.toLowerCase().includes(searchTerm);
+                      const matchesDescription = project.description?.toLowerCase().includes(searchTerm) || false;
+                      const matchesClient = project.client_name?.toLowerCase().includes(searchTerm) || false;
+                      if (!matchesName && !matchesDescription && !matchesClient) return false;
+                    }
+
+                    // Status filter
+                    if (projectFilters.status) {
+                      // Use the project's actual status from database if available
+                      if (project.status && project.status === projectFilters.status) {
+                        // Status matches exactly
+                      } else if (!project.status) {
+                        // Fallback to calculating status from tasks
+                        const projectTasks = tasks.filter(task => task.project_id === project.id);
+                        const completedTasks = projectTasks.filter(task => task.status === 'completed').length;
+                        const inProgressTasks = projectTasks.filter(task => task.status === 'in_progress').length;
+                        const projectStatus = completedTasks === projectTasks.length && projectTasks.length > 0 ? 'completed' : 
+                                            inProgressTasks > 0 ? 'in_progress' : 'pending';
+                        if (projectStatus !== projectFilters.status) return false;
+                      } else {
+                        // Project has status but it doesn't match filter
+                        return false;
+                      }
+                    }
+
+                    // Client filter
+                    if (projectFilters.client && project.client_name !== projectFilters.client) {
+                      return false;
+                    }
+
+                    // Project Manager filter
+                    if (projectFilters.projectManager) {
+                      // Check if the project is assigned to the selected project manager
+                      const isAssignedToPM = projectManagerAssignments.some(
+                        assignment => assignment.project_id === project.id && 
+                        assignment.project_manager_id === projectFilters.projectManager
+                      );
+                      if (!isAssignedToPM) return false;
+                    }
+
+                    return true;
+                  })
+                  .sort((a, b) => {
+                    // Sort filter
+                    switch (projectFilters.dateSort) {
+                      case 'oldest':
+                        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+                      case 'name_asc':
+                        return a.name.localeCompare(b.name);
+                      case 'name_desc':
+                        return b.name.localeCompare(a.name);
+                      case 'newest':
+                      default:
+                        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                    }
+                  })
+                  .map(project => {
               const projectTasks = tasks.filter(task => task.project_id === project.id);
               return (
                 <ProjectCard
@@ -1434,20 +1883,60 @@ const handleDeleteHoliday = async (holidayId: string) => {
                   tasks={projectTasks}
                   onEdit={handleEditProject}
                   onDelete={handleDeleteProject}
-                  onStatusChange={handleStatusChange}
-                  onUpdate={handleTaskUpdate}
+                  onProjectUpdate={handleProjectUpdate}
                 />
               );
             })}
           </div>
+            </>
         )}
         <Modal isOpen={isProjectFormOpen} onClose={() => setIsProjectFormOpen(false)} title="Add Project">
           <form
-            onSubmit={e => {
+            onSubmit={async e => {
               e.preventDefault();
-              addProject(projectForm);
-              setIsProjectFormOpen(false);
-              setProjectForm({ name: '', description: '', client_name: '', start_date: '', expected_end_date: '' });
+              
+              try {
+                // Extract project manager ID from form data
+                const { project_manager_id, ...projectData } = projectForm;
+                
+                // Create the project
+                const newProject = await addProject(projectData);
+                
+                // If a project manager is selected, create the assignment
+                if (project_manager_id && newProject) {
+                  try {
+                    await supabase
+                      .from('project_manager_assignments')
+                      .insert({
+                        project_manager_id: project_manager_id,
+                        project_id: newProject.id,
+                        assigned_by: user?.id || null
+                      });
+                    
+                    // Get the project manager name for the success message
+                    const selectedPM = projectManagers.find(pm => pm.id === project_manager_id);
+                    if (selectedPM) {
+                      toast.success(`Project created and assigned to ${selectedPM.name} successfully!`);
+                    } else {
+                      toast.success('Project created successfully!');
+                    }
+                  } catch (error) {
+                    console.error('Failed to assign project manager:', error);
+                    toast.success('Project created successfully! (Project manager assignment failed)');
+                  }
+                } else {
+                  toast.success('Project created successfully!');
+                }
+                
+                // Refresh the projects list to show the new project
+                fetchProjects();
+                
+                setIsProjectFormOpen(false);
+                setProjectForm({ name: '', description: '', client_name: '', start_date: '', expected_end_date: '', project_manager_id: '' });
+              } catch (error) {
+                console.error('Failed to create project:', error);
+                toast.error('Failed to create project');
+              }
             }}
             className="space-y-4"
           >
@@ -1498,6 +1987,21 @@ const handleDeleteHoliday = async (holidayId: string) => {
                 value={projectForm.expected_end_date}
                 onChange={e => setProjectForm(f => ({ ...f, expected_end_date: e.target.value }))}
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project Manager</label>
+              <select
+                className="w-full border rounded px-3 py-2"
+                value={projectForm.project_manager_id}
+                onChange={e => setProjectForm(f => ({ ...f, project_manager_id: e.target.value }))}
+              >
+                <option value="">No Project Manager (Unassigned)</option>
+                {projectManagers.map(pm => (
+                  <option key={pm.id} value={pm.id}>
+                    {pm.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex justify-end">
               <Button type="submit">Add Project</Button>
@@ -1555,11 +2059,25 @@ const handleDeleteHoliday = async (holidayId: string) => {
                 onChange={e => setEditProjectForm(f => ({ ...f, expected_end_date: e.target.value }))}
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                className="w-full border rounded px-3 py-2"
+                value={editProjectForm.status}
+                onChange={e => setEditProjectForm(f => ({ ...f, status: e.target.value }))}
+              >
+                <option value="active">Active</option>
+                <option value="on_hold">On Hold</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
             <div className="flex justify-end">
               <Button type="submit">Update Project</Button>
             </div>
           </form>
         </Modal>
+        </div>
       </div>
     );
   }
@@ -1569,9 +2087,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
     if (!user || user.role !== 'admin') return null;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Admin Profile</h1>
-        </div>
+
         <Card className="max-w-md mx-auto p-6">
           <div className="flex flex-col items-center space-y-4">
             <div className="bg-blue-100 w-20 h-20 rounded-full flex items-center justify-center mb-2">
@@ -1684,29 +2200,43 @@ const handleDeleteHoliday = async (holidayId: string) => {
     );
   }
 
+  // Add project manager management tab for admin
+  if (activeTab === 'project-manager-management') {
+    return (
+      <div className="space-y-6">
+        <ProjectManagerManagement />
+      </div>
+    );
+  }
+
   // Add admin management tab for admin
   if (activeTab === 'admin-management') {
     // Only Super-Admin can see this section
-    if (!user || user.name !== 'Super-Admin' || user.email !== 'mmandviya93@gmail.com') {
+    if (!user || user.email !== 'contact.tasknova@gmail.com') {
       return (
         <div className="p-8 text-center text-gray-500">You do not have access to this section.</div>
       );
     }
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Admin Management</h1>
+      <div className="space-y-8">
+
+        
+        {/* Admins Section */}
+        <div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Admins</h2>
+          <AdminsList />
         </div>
-        <AdminsList />
       </div>
     );
   }
 
   if (activeTab === 'leave-defaults' && isSuperAdmin) {
-    if (leaveBalancesLoading || members.length === 0) {
+    // Combine members and project managers for leave management
+    const allTeamMembers = [...members, ...projectManagers];
+    if (leaveBalancesLoading || allTeamMembers.length === 0) {
       return <div className="text-center py-8 text-gray-500">Loading leave balances...</div>;
     }
-    const filteredMembers = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    const filteredMembers = allTeamMembers.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
 
     // Date display
     const today = new Date();
@@ -1760,7 +2290,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
       <div className="space-y-8 max-w-2xl mx-auto mt-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
           <div>
-            <h1 className="text-2xl font-bold text-blue-800 mb-1 animate-pulse">Leaves Management</h1>
+
             <div className="flex items-center gap-6 text-sm text-gray-700 mt-2">
               <span className="font-semibold animate-fade-in">Year: <span className="text-blue-600 font-bold animate-pulse-slow">{calendarYear}</span></span>
               <span className="font-semibold animate-fade-in">Today: <span className="text-green-600 font-bold animate-pulse-slow">{today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span></span>
@@ -1778,20 +2308,48 @@ const handleDeleteHoliday = async (holidayId: string) => {
           {filteredMembers.length === 0 ? (
             <div className="text-gray-500 text-center">No members found.</div>
           ) : filteredMembers.map(member => {
-            const balances = leaveBalances.find(b => b.member_id === member.id && b.year === year);
+            const isProjectManager = projectManagers.some(pm => pm.id === member.id);
+            const role = isProjectManager ? 'Project Manager' : 'Member';
+            
+            // Find balances based on role
+            const balances = isProjectManager 
+              ? pmLeaveBalances.find(b => b.project_manager_id === member.id && b.year === year)
+              : leaveBalances.find(b => b.member_id === member.id && b.year === year);
             return (
               <div key={member.id} className="flex items-center justify-between bg-white rounded-lg shadow p-4 mb-4 border border-gray-100">
+                <div className="flex items-center gap-3">
                 <div className="font-semibold text-lg text-gray-900">{member.name}</div>
+                  <span className={`text-xs px-2 py-1 rounded-full ${isProjectManager ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {role}
+                  </span>
+                </div>
                 <div className="flex gap-3 items-center">
                   {editingBalances[member.id] ? (
                     <>
                       <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.sick_leaves ?? balances?.sick_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], sick_leaves: +e.target.value } }))} />
                       <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.casual_leaves ?? balances?.casual_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], casual_leaves: +e.target.value } }))} />
-                      <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.paid_leaves ?? balances?.paid_leaves ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], paid_leaves: +e.target.value } }))} />
+                      <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[member.id]?.paid_leaves ?? (isProjectManager ? balances?.earned_leave : balances?.paid_leaves) ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [member.id]: { ...prev[member.id], paid_leaves: +e.target.value } }))} />
                       <Button size="sm" variant="primary" onClick={async () => {
                         setSavingMemberId(member.id);
                         const input = balancesInput[member.id];
-                        const { error } = await supabase
+                        
+                        let error;
+                        if (isProjectManager) {
+                          // Save to project_manager_leave_balances table
+                          const { error: pmError } = await supabase
+                            .from('project_manager_leave_balances')
+                            .upsert({
+                              project_manager_id: member.id,
+                              year: year,
+                              sick_leave: input.sick_leaves,
+                              casual_leave: input.casual_leaves,
+                              earned_leave: input.paid_leaves, // PM table uses earned_leave instead of paid_leaves
+                              updated_at: new Date().toISOString(),
+                            }, { onConflict: 'project_manager_id,year' });
+                          error = pmError;
+                        } else {
+                          // Save to member_leave_balances table
+                          const { error: memberError } = await supabase
                           .from('member_leave_balances')
                           .upsert({
                             member_id: member.id,
@@ -1801,17 +2359,25 @@ const handleDeleteHoliday = async (holidayId: string) => {
                             paid_leaves: input.paid_leaves,
                             updated_at: new Date().toISOString(),
                           }, { onConflict: 'member_id,year' });
+                          error = memberError;
+                        }
+                        
                         if (!error) {
                           toast('✅ Leave balances updated', { style: { background: '#10b981', color: 'white' }, duration: 3000 });
                         } else {
+                          console.error('Failed to update leave balances for:', member.name, 'Error:', error);
                           toast('❌ Failed to update leave balances', { style: { background: '#ef4444', color: 'white' }, duration: 4000 });
                         }
                         setEditingBalances((prev) => ({ ...prev, [member.id]: false }));
                         setLeaveBalancesLoading(true);
-                        const res = await supabase
-                          .from('member_leave_balances')
-                          .select('*');
-                        setLeaveBalances(res.data || []);
+                        
+                        // Refresh both tables
+                        const [memberRes, pmRes] = await Promise.all([
+                          supabase.from('member_leave_balances').select('*'),
+                          supabase.from('project_manager_leave_balances').select('*')
+                        ]);
+                        setLeaveBalances(memberRes.data || []);
+                        setPmLeaveBalances(pmRes.data || []);
                         setLeaveBalancesLoading(false);
                         setSavingMemberId(null);
                       }} disabled={savingMemberId === member.id}>
@@ -1821,12 +2387,19 @@ const handleDeleteHoliday = async (holidayId: string) => {
                     </>
                   ) : (
                     <>
-                  <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leaves ?? 30}</span>
-                  <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leaves ?? 30}</span>
-                  <span className="px-2 py-1 bg-green-50 rounded">Paid: {balances?.paid_leaves ?? 30}</span>
+                  <span className="px-2 py-1 bg-blue-50 rounded">Sick: {isProjectManager ? (balances?.sick_leave ?? 30) : (balances?.sick_leaves ?? 30)}</span>
+                  <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {isProjectManager ? (balances?.casual_leave ?? 30) : (balances?.casual_leaves ?? 30)}</span>
+                  <span className="px-2 py-1 bg-green-50 rounded">{isProjectManager ? 'Earned' : 'Paid'}: {isProjectManager ? (balances?.earned_leave ?? 30) : (balances?.paid_leaves ?? 30)}</span>
                       <Button size="sm" variant="outline" onClick={() => {
                         setEditingBalances((prev) => ({ ...prev, [member.id]: true }));
-                        setBalancesInput((prev: any) => ({ ...prev, [member.id]: { sick_leaves: balances?.sick_leaves ?? 30, casual_leaves: balances?.casual_leaves ?? 30, paid_leaves: balances?.paid_leaves ?? 30 } }));
+                        setBalancesInput((prev: any) => ({ 
+                          ...prev, 
+                          [member.id]: { 
+                            sick_leaves: isProjectManager ? (balances?.sick_leave ?? 30) : (balances?.sick_leaves ?? 30), 
+                            casual_leaves: isProjectManager ? (balances?.casual_leave ?? 30) : (balances?.casual_leaves ?? 30), 
+                            paid_leaves: isProjectManager ? (balances?.earned_leave ?? 30) : (balances?.paid_leaves ?? 30) 
+                          } 
+                        }));
                       }}>Edit</Button>
                     </>
                   )}
@@ -1868,7 +2441,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
   if (activeTab === 'notifications') {
     return (
       <div className="max-w-2xl mx-auto py-8">
-        <h1 className="text-2xl font-bold mb-6">Notifications</h1>
+
         {adminNotificationsLoading ? (
           <div className="text-gray-500">Loading notifications...</div>
         ) : adminNotifications.length === 0 ? (
@@ -1931,15 +2504,103 @@ const handleDeleteHoliday = async (holidayId: string) => {
       new Date(h.date).toLocaleDateString().includes(holidaySearch)
     );
 
+    // Calculate analytics
+    const currentYear = new Date().getFullYear();
+    const currentYearHolidays = holidays.filter(h => new Date(h.date).getFullYear() === currentYear);
+    const upcomingHolidays = holidays.filter(h => new Date(h.date) > new Date());
+    const pastHolidays = holidays.filter(h => new Date(h.date) < new Date());
+    const thisMonthHolidays = holidays.filter(h => {
+      const holidayDate = new Date(h.date);
+      const now = new Date();
+      return holidayDate.getMonth() === now.getMonth() && holidayDate.getFullYear() === now.getFullYear();
+    });
+
     return (
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold">Company Holidays</h2>
+        {/* Enhanced Header Section */}
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                <CalendarDays className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">Company Calendar Hub</h1>
+                <p className="text-gray-600 text-sm">Manage and track all company holidays and important dates</p>
+              </div>
+            </div>
+            <Button 
+              onClick={() => {
+                setEditHoliday(null);
+                setHolidayForm({ holiday_name: '', date: '', description: '' });
+                setHolidayModalOpen(true);
+              }}
+              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              Add Holiday
+            </Button>
+          </div>
+        </div>
+
+        {/* Analytics Dashboard */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Holidays</p>
+                <p className="text-2xl font-bold text-gray-900">{holidays.length}</p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-blue-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">This Year</p>
+                <p className="text-2xl font-bold text-green-600">{currentYearHolidays.length}</p>
+              </div>
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-green-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Upcoming</p>
+                <p className="text-2xl font-bold text-orange-600">{upcomingHolidays.length}</p>
+              </div>
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-orange-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">This Month</p>
+                <p className="text-2xl font-bold text-purple-600">{thisMonthHolidays.length}</p>
+              </div>
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* View Toggle and Search */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex space-x-2">
             <div className="inline-flex rounded-md shadow-sm" role="group">
               <button
                 type="button"
-                className={`px-4 py-2 text-sm font-medium rounded-l-lg ${holidayView === 'calendar' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`px-4 py-2 text-sm font-medium rounded-l-lg transition-all duration-200 ${
+                  holidayView === 'calendar' 
+                    ? 'bg-green-100 text-green-700 border border-green-200' 
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                }`}
                 onClick={() => setHolidayView('calendar')}
               >
                 <div className="flex items-center">
@@ -1949,7 +2610,11 @@ const handleDeleteHoliday = async (holidayId: string) => {
               </button>
               <button
                 type="button"
-                className={`px-4 py-2 text-sm font-medium rounded-r-lg ${holidayView === 'list' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`px-4 py-2 text-sm font-medium rounded-r-lg transition-all duration-200 ${
+                  holidayView === 'list' 
+                    ? 'bg-green-100 text-green-700 border border-green-200' 
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                }`}
                 onClick={() => setHolidayView('list')}
               >
                 <div className="flex items-center">
@@ -1958,19 +2623,40 @@ const handleDeleteHoliday = async (holidayId: string) => {
                 </div>
               </button>
             </div>
-            <Button onClick={() => {
-              setEditHoliday(null);
-              setHolidayForm({ holiday_name: '', date: '', description: '' });
-              setHolidayModalOpen(true);
-            }}>
-              Add Holiday
+          </div>
+          
+          <div className="relative w-full lg:w-64">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search holidays..."
+              className="pl-10 pr-20 py-2 w-full border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+              value={holidaySearch}
+              onChange={(e) => setHolidaySearch(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  // Trigger search on Enter key
+                  e.preventDefault();
+                }
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-green-600 hover:bg-green-700 text-white border-0 px-3 py-1 text-xs font-medium rounded-md transition-all duration-200"
+              onClick={() => {
+                // Search functionality is already handled by the onChange event
+                // This button provides visual feedback and accessibility
+              }}
+            >
+              Search
             </Button>
           </div>
         </div>
 
         {holidaysLoading ? (
           <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
           </div>
         ) : holidayView === 'calendar' ? (
           <HolidayCalendar
@@ -1981,74 +2667,78 @@ const handleDeleteHoliday = async (holidayId: string) => {
             isAdmin={true}
           />
         ) : (
-          <Card>
-            <div className="p-4">
-              <div className="flex justify-between items-center mb-4">
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search holidays..."
-                    className="pl-10 pr-4 py-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={holidaySearch}
-                    onChange={(e) => setHolidaySearch(e.target.value)}
-                  />
-                </div>
-              </div>
-
+          <Card className="border border-gray-200 shadow-sm">
+            <div className="p-6">
               {filteredHolidays.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Holiday Name</th>
-                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                        <th className="p-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Holiday Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="bg-white divide-y divide-gray-200">
                       {filteredHolidays.map((h) => (
-                        <tr key={h.id} className="hover:bg-gray-50">
-                          <td className="p-2">{new Date(h.date).toLocaleDateString()}</td>
-                          <td className="p-2 font-semibold">{h.holiday_name}</td>
-                          <td className="p-2 text-sm text-gray-700">{h.description || '-'}</td>
-                          <td className="p-2 flex gap-2">
-                            {(() => {
-                              const holidayDate = new Date(h.date);
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              const isPastHoliday = holidayDate < today;
-                              
-                              return (
-                                <>
-                                  {!isPastHoliday && (
-                                    <Button size="sm" variant="outline" icon={Pencil} onClick={() => { 
-                                      setEditHoliday(h); 
-                                      setHolidayForm({ 
-                                        holiday_name: h.holiday_name, 
-                                        date: h.date, 
-                                        description: h.description || '' 
-                                      }); 
-                                      setHolidayModalOpen(true); 
-                                    }}>
-                                      Edit
+                        <tr key={h.id} className="hover:bg-gray-50 transition-colors duration-150">
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-gray-900">
+                              {new Date(h.date).toLocaleDateString()}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(h.date).toLocaleDateString('en-US', { weekday: 'long' })}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-semibold text-gray-900">{h.holiday_name}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-gray-700 max-w-xs truncate">
+                              {h.description || '-'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              {(() => {
+                                const holidayDate = new Date(h.date);
+                                const today = new Date();
+                                const isPast = holidayDate < today;
+                                
+                                return (
+                                  <>
+                                    {!isPast && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          setEditHoliday(h);
+                                          setHolidayForm({
+                                            holiday_name: h.holiday_name,
+                                            date: h.date,
+                                            description: h.description || ''
+                                          });
+                                          setHolidayModalOpen(true);
+                                        }}
+                                        className="hover:bg-green-50 hover:border-green-300"
+                                      >
+                                        Edit
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="danger"
+                                      size="sm"
+                                      onClick={() => handleDeleteHoliday(h.id)}
+                                      disabled={isPast}
+                                      className="hover:bg-red-50"
+                                    >
+                                      Delete
                                     </Button>
-                                  )}
-                                  <Button 
-                                    size="sm" 
-                                    variant="danger" 
-                                    onClick={async () => {
-                                      if (window.confirm('Are you sure you want to delete this holiday?')) {
-                                        await handleDeleteHoliday(h.id);
-                                      }
-                                    }}
-                                  >
-                                    Delete
-                                  </Button>
-                                </>
-                              );
-                            })()}
+                                  </>
+                                );
+                              })()}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2056,7 +2746,27 @@ const handleDeleteHoliday = async (holidayId: string) => {
                   </table>
                 </div>
               ) : (
-                <p className="text-center text-gray-500 py-8">No holidays found matching your search.</p>
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CalendarDays className="w-10 h-10 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Holidays Found</h3>
+                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                    {holidaySearch ? 'No holidays match your search criteria.' : 'No holidays have been added yet. Get started by adding your first company holiday.'}
+                  </p>
+                  {!holidaySearch && (
+                    <Button
+                      onClick={() => {
+                        setEditHoliday(null);
+                        setHolidayForm({ holiday_name: '', date: '', description: '' });
+                        setHolidayModalOpen(true);
+                      }}
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                    >
+                      Add Your First Holiday
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </Card>

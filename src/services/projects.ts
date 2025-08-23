@@ -38,5 +38,30 @@ export const projectService = {
       .delete()
       .eq('id', id);
     if (error) throw new Error('Failed to delete project');
+  },
+
+  async markProjectAsComplete(id: string): Promise<Project> {
+    // First, update the project status to completed
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .update({ status: 'completed' })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (projectError) throw new Error('Failed to mark project as complete');
+    
+    // Then, mark all associated tasks as completed
+    const { error: tasksError } = await supabase
+      .from('tasks')
+      .update({ status: 'completed' })
+      .eq('project_id', id);
+    
+    if (tasksError) {
+      console.error('Failed to update associated tasks:', tasksError);
+      // Don't throw error here as the project was successfully updated
+    }
+    
+    return projectData;
   }
 }; 
