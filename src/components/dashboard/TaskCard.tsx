@@ -414,7 +414,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => onStatusChange(task.id, 'completed')}
+          onClick={() => {
+            console.log('TaskCard: Mark as Complete button clicked for task:', task.id);
+            onStatusChange(task.id, 'completed');
+          }}
           className="w-full mt-2 text-green-700 border-green-400 hover:bg-green-50 hover:border-green-600"
         >
           Mark as Complete

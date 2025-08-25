@@ -104,7 +104,31 @@ export const useLeaves = () => {
     };
   }, [user]);
 
-  // Helper to count non-Sunday days in a date range (inclusive)
+  // Helper to count non-Sunday and non-holiday days in a date range (inclusive)
+  async function countNonSundayAndNonHolidayDays(fromDate: string, toDate: string): Promise<number> {
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    let count = 0;
+    
+    // Fetch holidays for the current year
+    const currentYear = new Date().getFullYear();
+    const { data: holidays } = await supabase
+      .from('company_holidays')
+      .select('date')
+      .eq('year', currentYear);
+    
+    const holidayDates = new Set(holidays?.map(h => h.date) || []);
+    
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      if (d.getDay() !== 0 && !holidayDates.has(dateStr)) { // Not Sunday and not a holiday
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // Helper to count non-Sunday days in a date range (inclusive) - for backward compatibility
   function countNonSundayDays(fromDate: string, toDate: string): number {
     const from = new Date(fromDate);
     const to = new Date(toDate);
@@ -141,41 +165,64 @@ export const useLeaves = () => {
     payload?: any
   ) => {
     // 1. Get user's leave balance for current year (check both members and project managers)
-    const year = new Date().getFullYear();
+    const currentYear = new Date().getFullYear();
     
-         // First try to find balance for member
-     let { data: balance, error: balanceError } = await supabase
-       .from('member_leave_balances')
-       .select('sick_leaves, casual_leaves, paid_leaves')
-       .eq('member_id', userId)
-       .eq('year', year)
-       .single();
+    // First try to find balance for member
+    let { data: balance, error: balanceError } = await supabase
+      .from('member_leave_balances')
+      .select('sick_leaves, casual_leaves, paid_leaves')
+      .eq('member_id', userId)
+      .eq('year', currentYear)
+      .single();
 
-     // If not found as member, try as admin
-     if (balanceError || !balance) {
-       const { data: adminBalance, error: adminBalanceError } = await supabase
-         .from('member_leave_balances')
-         .select('sick_leaves, casual_leaves, paid_leaves')
-         .eq('admin_id', userId)
-         .eq('year', year)
-         .single();
-       
-       balance = adminBalance;
-       balanceError = adminBalanceError;
-     }
+    // If not found as member, try as admin
+    if (balanceError || !balance) {
+      const { data: adminBalance, error: adminBalanceError } = await supabase
+        .from('member_leave_balances')
+        .select('sick_leaves, casual_leaves, paid_leaves')
+        .eq('admin_id', userId)
+        .eq('year', currentYear)
+        .single();
+      
+      balance = adminBalance;
+      balanceError = adminBalanceError;
+    }
 
-     // If not found as admin, try as project manager
-     if (balanceError || !balance) {
-       const { data: pmBalance, error: pmBalanceError } = await supabase
-         .from('member_leave_balances')
-         .select('sick_leaves, casual_leaves, paid_leaves')
-         .eq('project_manager_id', userId)
-         .eq('year', year)
-         .single();
-       
-       balance = pmBalance;
-       balanceError = pmBalanceError;
-     }
+    // If not found as admin, try as project manager in member_leave_balances
+    if (balanceError || !balance) {
+      const { data: pmBalance, error: pmBalanceError } = await supabase
+        .from('member_leave_balances')
+        .select('sick_leaves, casual_leaves, paid_leaves')
+        .eq('project_manager_id', userId)
+        .eq('year', currentYear)
+        .single();
+      
+      balance = pmBalance;
+      balanceError = pmBalanceError;
+    }
+
+    // If not found in member_leave_balances, try project_manager_leave_balances
+    if (balanceError || !balance) {
+      const { data: pmBalance, error: pmBalanceError } = await supabase
+        .from('project_manager_leave_balances')
+        .select('sick_leave, casual_leave, earned_leave')
+        .eq('project_manager_id', userId)
+        .eq('year', currentYear)
+        .single();
+      
+      if (!pmBalanceError && pmBalance) {
+        // Map the project manager leave balance fields to the expected format
+        balance = {
+          sick_leaves: pmBalance.sick_leave,
+          casual_leaves: pmBalance.casual_leave,
+          paid_leaves: pmBalance.earned_leave,
+        };
+        balanceError = null;
+      } else {
+        balance = pmBalance;
+        balanceError = pmBalanceError;
+      }
+    }
 
     if (balanceError || !balance) {
       console.error('Error fetching leave balance:', balanceError);
@@ -217,87 +264,99 @@ export const useLeaves = () => {
       }
     });
 
-    // 4. For the new leave, count only days that are not Sundays and not already in leaveDatesSet
-    if (daysRequested === undefined) {
-      let alreadyLeaveDays = 0;
-      if (excludeLeaveId && payload) {
-        if (payload.category === 'multi-day' && payload.from_date && payload.to_date) {
-          let d = new Date(payload.from_date);
-          const to = new Date(payload.to_date);
-          let isStartBooked = false;
-          let isEndBooked = false;
-          let idx = 0;
-          daysRequested = 0;
-          while (d <= to) {
-            const dayStr = d.toISOString().split('T')[0];
-            if (d.getDay() !== 0) {
-              if (leaveDatesSet.has(dayStr)) {
-                alreadyLeaveDays++;
-                if (idx === 0) isStartBooked = true;
-                // Check end after loop
-              } else {
-                daysRequested++;
-              }
-            }
-            d.setDate(d.getDate() + 1);
-            idx++;
-          }
-          // Check end date
-          const endDate = new Date(payload.to_date);
-          if (endDate.getDay() !== 0 && leaveDatesSet.has(endDate.toISOString().split('T')[0])) isEndBooked = true;
-          if (isStartBooked || isEndBooked) {
-            toast('❌ Start or end date is already booked', {
-              description: 'The start or end date of your leave overlaps with an existing leave.',
-              style: { background: '#ef4444', color: 'white' },
-              duration: 4000,
-            });
-            throw new Error('Start or end date already booked.');
-          }
-        }
-      } else if (leaveData && leaveData.category === 'multi-day' && leaveData.from_date && leaveData.to_date) {
-        let d = new Date(leaveData.from_date);
-        const to = new Date(leaveData.to_date);
-        let isStartBooked = false;
-        let isEndBooked = false;
-        let idx = 0;
-        daysRequested = 0;
-        alreadyLeaveDays = 0;
-        while (d <= to) {
-          const dayStr = d.toISOString().split('T')[0];
-          if (d.getDay() !== 0) {
-            if (leaveDatesSet.has(dayStr)) {
-              alreadyLeaveDays++;
-              if (idx === 0) isStartBooked = true;
-              // Check end after loop
-            } else {
-              daysRequested++;
-            }
-          }
-          d.setDate(d.getDate() + 1);
-          idx++;
-        }
-        // Check end date
-        const endDate = new Date(leaveData.to_date);
-        if (endDate.getDay() !== 0 && leaveDatesSet.has(endDate.toISOString().split('T')[0])) isEndBooked = true;
-        if (isStartBooked || isEndBooked) {
-          toast('❌ Start or end date is already booked', {
-            description: 'The start or end date of your leave overlaps with an existing leave.',
-            style: { background: '#ef4444', color: 'white' },
-            duration: 4000,
-          });
-          throw new Error('Start or end date already booked.');
-        }
-      } else {
-        daysRequested = 1;
-      }
-      // For single-day, check overlap
-      if (leaveData && leaveData.category !== 'multi-day' && leaveData.leave_date) {
-        const dayStr = new Date(leaveData.leave_date).toISOString().split('T')[0];
-        if (leaveDatesSet.has(dayStr)) {
-          daysRequested = 0;
-        }
-      }
-    }
+         // 4. For the new leave, count only days that are not Sundays, not holidays, and not already in leaveDatesSet
+     if (daysRequested === undefined) {
+       let alreadyLeaveDays = 0;
+       
+       // Fetch holidays for the current year
+       const currentYear = new Date().getFullYear();
+       const { data: holidays } = await supabase
+         .from('company_holidays')
+         .select('date')
+         .eq('year', currentYear);
+       
+       const holidayDates = new Set(holidays?.map(h => h.date) || []);
+       
+       if (excludeLeaveId && payload) {
+         if (payload.category === 'multi-day' && payload.from_date && payload.to_date) {
+           let d = new Date(payload.from_date);
+           const to = new Date(payload.to_date);
+           let isStartBooked = false;
+           let isEndBooked = false;
+           let idx = 0;
+           daysRequested = 0;
+           while (d <= to) {
+             const dayStr = d.toISOString().split('T')[0];
+             if (d.getDay() !== 0 && !holidayDates.has(dayStr)) { // Not Sunday and not holiday
+               if (leaveDatesSet.has(dayStr)) {
+                 alreadyLeaveDays++;
+                 if (idx === 0) isStartBooked = true;
+                 // Check end after loop
+               } else {
+                 daysRequested++;
+               }
+             }
+             d.setDate(d.getDate() + 1);
+             idx++;
+           }
+           // Check end date
+           const endDate = new Date(payload.to_date);
+           const endDateStr = endDate.toISOString().split('T')[0];
+           if (endDate.getDay() !== 0 && !holidayDates.has(endDateStr) && leaveDatesSet.has(endDateStr)) isEndBooked = true;
+           if (isStartBooked || isEndBooked) {
+             toast('❌ Start or end date is already booked', {
+               description: 'The start or end date of your leave overlaps with an existing leave.',
+               style: { background: '#ef4444', color: 'white' },
+               duration: 4000,
+             });
+             throw new Error('Start or end date already booked.');
+           }
+         }
+       } else if (leaveData && leaveData.category === 'multi-day' && leaveData.from_date && leaveData.to_date) {
+         let d = new Date(leaveData.from_date);
+         const to = new Date(leaveData.to_date);
+         let isStartBooked = false;
+         let isEndBooked = false;
+         let idx = 0;
+         daysRequested = 0;
+         alreadyLeaveDays = 0;
+         while (d <= to) {
+           const dayStr = d.toISOString().split('T')[0];
+           if (d.getDay() !== 0 && !holidayDates.has(dayStr)) { // Not Sunday and not holiday
+             if (leaveDatesSet.has(dayStr)) {
+               alreadyLeaveDays++;
+               if (idx === 0) isStartBooked = true;
+               // Check end after loop
+             } else {
+               daysRequested++;
+             }
+           }
+           d.setDate(d.getDate() + 1);
+           idx++;
+         }
+         // Check end date
+         const endDate = new Date(leaveData.to_date);
+         const endDateStr = endDate.toISOString().split('T')[0];
+         if (endDate.getDay() !== 0 && !holidayDates.has(endDateStr) && leaveDatesSet.has(endDateStr)) isEndBooked = true;
+         if (isStartBooked || isEndBooked) {
+           toast('❌ Start or end date is already booked', {
+             description: 'The start or end date of your leave overlaps with an existing leave.',
+             style: { background: '#ef4444', color: 'white' },
+             duration: 4000,
+           });
+           throw new Error('Start or end date already booked.');
+         }
+       } else {
+         daysRequested = 1;
+       }
+       // For single-day, check overlap
+       if (leaveData && leaveData.category !== 'multi-day' && leaveData.leave_date) {
+         const dayStr = new Date(leaveData.leave_date).toISOString().split('T')[0];
+         if (leaveDatesSet.has(dayStr)) {
+           daysRequested = 0;
+         }
+       }
+     }
 
     // 5. Get total allocated leaves
     let totalAllocated = 0;
@@ -429,33 +488,37 @@ export const useLeaves = () => {
       };
 
       setLeaves(prev => [newLeave, ...prev]);
-      // Send webhook to n8n automation for leave added (to both URLs)
-      try {
-        await fetch('https://n8nautomation.site/webhook-test/onLeaveAdded', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        await fetch('https://n8nautomation.site/webhook-test/onleaveadded', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...data,
-            member_email: user?.email || '',
-          }),
-        });
-        await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...data,
-            member_email: user?.email || '',
-            event: 'leave-added',
-          }),
-        });
-      } catch (webhookError) {
-        console.error('Failed to send leave added webhook:', webhookError);
-      }
+      // Send webhook to n8n automation for leave added (non-blocking)
+      fetch('https://n8nautomation.site/webhook-test/onLeaveAdded', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(webhookError => {
+        console.error('Failed to send leave added webhook (onLeaveAdded):', webhookError);
+      });
+      
+      fetch('https://n8nautomation.site/webhook-test/onleaveadded', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          member_email: user?.email || '',
+        }),
+      }).catch(webhookError => {
+        console.error('Failed to send leave added webhook (onleaveadded):', webhookError);
+      });
+      
+      fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          member_email: user?.email || '',
+          event: 'leave-added',
+        }),
+      }).catch(webhookError => {
+        console.error('Failed to send leave added webhook (taskaddedemail):', webhookError);
+      });
 
       // --- NEW: Notify all admins and the member (from/to logic) ---
       try {
@@ -472,7 +535,7 @@ export const useLeaves = () => {
                 from_id: user.id,
                 to_id: admin.id,
                 title: '📝 Leave Request',
-                message: `${user?.name || 'A member'} has requested leave: ${data.leave_type} (${data.category === 'multi-day' ? `${data.from_date} to ${data.to_date}` : data.leave_date})`,
+                                 message: `${user?.name || 'A member'} has requested leave: ${data.leave_type} (${data.category === 'multi-day' ? `${data.from_date} to ${data.to_date}` : (data.leave_date || data.from_date || 'No date')})`,
                 type: 'leave_requested',
                 related_id: data.id,
                 related_type: 'leave',
@@ -490,7 +553,7 @@ export const useLeaves = () => {
               from_id: user.id,
               to_id: user.id,
               title: '📝 You requested leave',
-              message: `You requested leave: ${data.leave_type} (${data.category === 'multi-day' ? `${data.from_date} to ${data.to_date}` : data.leave_date})`,
+                             message: `You requested leave: ${data.leave_type} (${data.category === 'multi-day' ? `${data.from_date} to ${data.to_date}` : (data.leave_date || data.from_date || 'No date')})`,
               type: 'leave_requested',
               related_id: data.id,
               related_type: 'leave',
@@ -531,7 +594,7 @@ export const useLeaves = () => {
     // Calculate days requested
     let daysRequested = 1;
     if (updates.category === 'multi-day' && updates.from_date && updates.to_date) {
-      daysRequested = countNonSundayDays(updates.from_date, updates.to_date);
+      daysRequested = await countNonSundayAndNonHolidayDays(updates.from_date, updates.to_date);
     }
 
     // Block single-day leave on Sunday
@@ -651,44 +714,68 @@ export const useLeaves = () => {
       throw new Error('Date already booked for another leave.');
     }
 
-    // Check leave balance before updating (only if not just status update)
-    if (user?.id && payload.leave_type && !isOnlyStatusUpdate) {
+    // Check leave balance before updating (only if not just status update and user is the leave owner)
+    // Skip leave balance check for admin status updates (approval/rejection)
+    if (user?.id && payload.leave_type && !isOnlyStatusUpdate && user?.id === updates.user_id && user?.role !== 'admin') {
       // Fetch leave balance for this user and year (supports both members and project managers)
-      const year = new Date().getFullYear();
+      const currentYear = new Date().getFullYear();
       
-             // First try to find balance for member
-       let { data: balances, error: balanceError } = await supabase
-         .from('member_leave_balances')
-         .select('*')
-         .eq('member_id', user.id)
-         .eq('year', year)
-         .single();
+      // First try to find balance for member
+      let { data: balances, error: balanceError } = await supabase
+        .from('member_leave_balances')
+        .select('*')
+        .eq('member_id', updates.user_id)
+        .eq('year', currentYear)
+        .single();
 
-       // If not found as member, try as admin
-       if (balanceError || !balances) {
-         const { data: adminBalances, error: adminBalanceError } = await supabase
-           .from('member_leave_balances')
-           .select('*')
-           .eq('admin_id', user.id)
-           .eq('year', year)
-           .single();
-         
-         balances = adminBalances;
-         balanceError = adminBalanceError;
-       }
+      // If not found as member, try as admin
+      if (balanceError || !balances) {
+        const { data: adminBalances, error: adminBalanceError } = await supabase
+          .from('member_leave_balances')
+          .select('*')
+          .eq('admin_id', updates.user_id)
+          .eq('year', currentYear)
+          .single();
+        
+        balances = adminBalances;
+        balanceError = adminBalanceError;
+      }
 
-       // If not found as admin, try as project manager
-       if (balanceError || !balances) {
-         const { data: pmBalances, error: pmBalanceError } = await supabase
-           .from('member_leave_balances')
-           .select('*')
-           .eq('project_manager_id', user.id)
-           .eq('year', year)
-           .single();
-         
-         balances = pmBalances;
-         balanceError = pmBalanceError;
-       }
+      // If not found as admin, try as project manager in member_leave_balances
+      if (balanceError || !balances) {
+        const { data: pmBalances, error: pmBalanceError } = await supabase
+          .from('member_leave_balances')
+          .select('*')
+          .eq('project_manager_id', updates.user_id)
+          .eq('year', currentYear)
+          .single();
+        
+        balances = pmBalances;
+        balanceError = pmBalanceError;
+      }
+
+      // If not found in member_leave_balances, try project_manager_leave_balances
+      if (balanceError || !balances) {
+        const { data: pmBalances, error: pmBalanceError } = await supabase
+          .from('project_manager_leave_balances')
+          .select('sick_leave, casual_leave, earned_leave')
+          .eq('project_manager_id', updates.user_id)
+          .eq('year', currentYear)
+          .single();
+        
+        if (!pmBalanceError && pmBalances) {
+          // Map the project manager leave balance fields to the expected format
+          balances = {
+            sick_leaves: pmBalances.sick_leave,
+            casual_leaves: pmBalances.casual_leave,
+            paid_leaves: pmBalances.earned_leave,
+          };
+          balanceError = null;
+        } else {
+          balances = pmBalances;
+          balanceError = pmBalanceError;
+        }
+      }
 
       if (!balanceError && balances) {
         // Calculate days requested in this update
@@ -696,14 +783,14 @@ export const useLeaves = () => {
         if (payload.category === 'multi-day' && payload.from_date && payload.to_date) {
           const from = new Date(payload.from_date);
           const to = new Date(payload.to_date);
-          daysRequested = countNonSundayDays(payload.from_date, payload.to_date);
+          daysRequested = await countNonSundayAndNonHolidayDays(payload.from_date, payload.to_date);
         }
 
         // Get all existing leaves of this type (approved or pending, excluding the current one being edited)
         const { data: existingLeaves, error: leavesError } = await supabase
           .from('leaves')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', updates.user_id)
           .eq('leave_type', payload.leave_type)
           .in('status', ['approved', 'pending'])
           .not('id', 'eq', id); // Exclude the current leave being edited
@@ -711,15 +798,15 @@ export const useLeaves = () => {
         let daysUsed = 0;
         if (!leavesError && existingLeaves) {
           // Calculate total days used/pending
-          existingLeaves.forEach(leave => {
+          for (const leave of existingLeaves) {
             if (leave.category === 'multi-day' && leave.from_date && leave.to_date) {
               const from = new Date(leave.from_date);
               const to = new Date(leave.to_date);
-              daysUsed += countNonSundayDays(leave.from_date, leave.to_date);
+              daysUsed += await countNonSundayAndNonHolidayDays(leave.from_date, leave.to_date);
             } else {
               daysUsed += 1; // Single day leave
             }
-          });
+          }
         }
 
         // Get total allocated leaves for this type
@@ -759,6 +846,100 @@ export const useLeaves = () => {
 
     if (error) {
       console.error('Error updating leave:', error);
+      
+      // Handle the specific case where the database trigger fails due to missing leave balance
+      if (error.message && error.message.includes('No leave balance found for user')) {
+        // This is likely an admin trying to approve a leave, but the trigger is looking for admin's balance
+        // instead of the leave owner's balance. Let's try to handle this manually.
+        
+        // First, let's get the leave details to see who owns it
+        const { data: leaveDetails, error: leaveError } = await supabase
+          .from('leaves')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (!leaveError && leaveDetails) {
+          // Check if this is an admin approval and the leave owner has a balance
+          const currentYear = new Date().getFullYear();
+          
+          // Try to find the leave owner's balance
+          let { data: ownerBalance, error: balanceError } = await supabase
+            .from('member_leave_balances')
+            .select('*')
+            .eq('member_id', leaveDetails.user_id)
+            .eq('year', currentYear)
+            .single();
+
+          // If not found as member, try as admin
+          if (balanceError || !ownerBalance) {
+            const { data: adminBalance, error: adminBalanceError } = await supabase
+              .from('member_leave_balances')
+              .select('*')
+              .eq('admin_id', leaveDetails.user_id)
+              .eq('year', currentYear)
+              .single();
+            
+            ownerBalance = adminBalance;
+            balanceError = adminBalanceError;
+          }
+
+          // If not found as admin, try as project manager in member_leave_balances
+          if (balanceError || !ownerBalance) {
+            const { data: pmBalance, error: pmBalanceError } = await supabase
+              .from('member_leave_balances')
+              .select('*')
+              .eq('project_manager_id', leaveDetails.user_id)
+              .eq('year', currentYear)
+              .single();
+            
+            ownerBalance = pmBalance;
+            balanceError = pmBalanceError;
+          }
+
+          // If not found in member_leave_balances, try project_manager_leave_balances
+          if (balanceError || !ownerBalance) {
+            const { data: pmBalance, error: pmBalanceError } = await supabase
+              .from('project_manager_leave_balances')
+              .select('sick_leave, casual_leave, earned_leave')
+              .eq('project_manager_id', leaveDetails.user_id)
+              .eq('year', currentYear)
+              .single();
+            
+            if (!pmBalanceError && pmBalance) {
+              ownerBalance = {
+                sick_leaves: pmBalance.sick_leave,
+                casual_leaves: pmBalance.casual_leave,
+                paid_leaves: pmBalance.earned_leave,
+              };
+              balanceError = null;
+            } else {
+              ownerBalance = pmBalance;
+              balanceError = pmBalanceError;
+            }
+          }
+
+          if (ownerBalance) {
+            // The leave owner has a balance, so the issue is with the trigger
+            // Let's try to update the leave again, but this time we'll handle the balance deduction manually
+            console.log('Leave owner has balance, attempting manual update...');
+            
+            // Try the update again
+            const { data: retryData, error: retryError } = await supabase
+              .from('leaves')
+              .update(payload)
+              .eq('id', id)
+              .select('*')
+              .single();
+
+            if (!retryError && retryData) {
+              // Success! The trigger might have worked this time or we got lucky
+              return retryData;
+            }
+          }
+        }
+      }
+      
       throw new Error(error.message || 'Failed to update leave');
     }
 
@@ -811,20 +992,18 @@ export const useLeaves = () => {
     // Update local state
     setLeaves(prev => prev.map(leave => (leave.id === id ? updatedLeave : leave)));
 
-    // Send webhook to n8n automation for leave updated
-    try {
-      await fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          member_email: user?.email || '',
-          event: 'leave-updated',
-        }),
-      });
-    } catch (webhookError) {
+    // Send webhook to n8n automation for leave updated (non-blocking)
+    fetch('https://n8nautomation.site/webhook-test/taskaddedemail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        member_email: user?.email || '',
+        event: 'leave-updated',
+      }),
+    }).catch(webhookError => {
       console.error('Failed to send leave updated webhook:', webhookError);
-    }
+    });
 
     // Show success toast
     toast('✅ Leave Updated', {

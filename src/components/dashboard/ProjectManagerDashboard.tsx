@@ -229,14 +229,14 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
     if (!user) return;
     
     const fetchBalance = async () => {
-      const year = new Date().getFullYear();
+      const currentYear = new Date().getFullYear();
       
       // First try to find balance for member
       let { data, error } = await supabase
         .from('member_leave_balances')
         .select('*')
         .eq('member_id', user.id)
-        .eq('year', year)
+        .eq('year', currentYear)
         .single();
       
       // If not found as member, try as admin
@@ -245,7 +245,7 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
           .from('member_leave_balances')
           .select('*')
           .eq('admin_id', user.id)
-          .eq('year', year)
+          .eq('year', currentYear)
           .single();
         
         data = adminData;
@@ -258,7 +258,7 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
           .from('project_manager_leave_balances')
           .select('*')
           .eq('project_manager_id', user.id)
-          .eq('year', year)
+          .eq('year', currentYear)
           .single();
         
         if (!pmError && pmData) {
@@ -306,6 +306,75 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
     
     fetchBalance();
     fetchHolidays();
+    
+    // Set up real-time subscription for leave balance updates
+    if (user.role === 'project_manager') {
+      console.log('🔄 PM Dashboard: Setting up real-time subscription for user:', user.id);
+      
+      const channel = supabase.channel('leave-balance-realtime-pm')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'member_leave_balances',
+          },
+          (payload) => {
+            console.log('🔄 PM Dashboard: member_leave_balances changed:', payload);
+            // Check if this change affects the current user
+            if (payload.new && (
+              (payload.new as any).member_id === user.id || 
+              (payload.new as any).admin_id === user.id || 
+              (payload.new as any).project_manager_id === user.id
+            )) {
+              console.log('🔄 PM Dashboard: This change affects current user, refetching balance');
+              fetchBalance();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'project_manager_leave_balances',
+          },
+          (payload) => {
+            console.log('🔄 PM Dashboard: project_manager_leave_balances changed:', payload);
+            // Check if this change affects the current user
+            if (payload.new && (payload.new as any).project_manager_id === user.id) {
+              console.log('🔄 PM Dashboard: This change affects current user, refetching balance');
+              fetchBalance();
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'leaves',
+          },
+          (payload) => {
+            console.log('🔄 PM Dashboard: Leave status changed:', payload);
+            // When a leave status changes (approved/rejected), refetch balance
+            if (payload.new && payload.old && 
+                (payload.new as any).status !== (payload.old as any).status && 
+                (payload.new as any).user_id === user.id) {
+              console.log('🔄 PM Dashboard: Leave status changed for current user, refetching balance');
+              fetchBalance();
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('🔄 PM Dashboard: Subscription status:', status);
+        });
+      
+      return () => {
+        console.log('🔄 PM Dashboard: Cleaning up subscription');
+        supabase.removeChannel(channel);
+      };
+    }
   }, [user]);
 
   useEffect(() => {

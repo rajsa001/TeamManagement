@@ -38,7 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
 
   const memberTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'tasks', label: 'My Tasks', icon: CheckSquare },
+    { id: 'tasks', label: 'My Tasks', icon: Target },
     { id: 'daily-tasks', label: 'Daily Tasks', icon: CheckSquare },
     { id: 'leaves', label: 'My Leaves', icon: CalendarDays },
     { id: 'projects', label: 'Projects', icon: BarChart3 },

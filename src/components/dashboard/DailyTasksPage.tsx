@@ -144,12 +144,36 @@ export const DailyTasksPage: React.FC = () => {
              </span>
            </div>
          </div>
-        <Button
-          onClick={() => setIsFormOpen(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white"
-        >
-          Add Daily Task
-        </Button>
+        <div className="flex space-x-3">
+          <Button
+            onClick={async () => {
+              try {
+                const { data, error } = await supabase.rpc('test_reset_daily_tasks');
+                if (error) {
+                  console.error('Error resetting daily tasks:', error);
+                  alert('Failed to reset daily tasks: ' + error.message);
+                } else {
+                  console.log('Daily tasks reset result:', data);
+                  alert(`Daily tasks reset successfully! ${data.tasks_reset} tasks were reset.`);
+                  // Refresh the tasks
+                  window.location.reload();
+                }
+              } catch (error) {
+                console.error('Error calling reset function:', error);
+                alert('Failed to reset daily tasks');
+              }
+            }}
+            className="bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            Reset Daily Tasks
+          </Button>
+          <Button
+            onClick={() => setIsFormOpen(true)}
+            className="bg-blue-500 hover:bg-blue-600 text-white"
+          >
+            Add Daily Task
+          </Button>
+        </div>
       </div>
 
       {/* Filters and Stats */}

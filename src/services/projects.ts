@@ -11,6 +11,40 @@ export const projectService = {
     return data || [];
   },
 
+  async getMemberProjects(userId: string): Promise<Project[]> {
+    try {
+      // First, get the project IDs that the member has tasks for
+      const { data: taskData, error: taskError } = await supabase
+        .from('tasks')
+        .select('project_id')
+        .eq('user_id', userId)
+        .not('project_id', 'is', null);
+      
+      if (taskError) throw taskError;
+      
+      // Extract unique project IDs
+      const projectIds = [...new Set(taskData?.map(task => task.project_id).filter(Boolean))];
+      
+      if (projectIds.length === 0) {
+        return [];
+      }
+      
+      // Then, get the projects with those IDs
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .in('id', projectIds)
+        .order('created_at', { ascending: false });
+      
+      if (projectError) throw projectError;
+      
+      return projectData || [];
+    } catch (error) {
+      console.error('Error in getMemberProjects:', error);
+      throw new Error('Failed to fetch member projects');
+    }
+  },
+
   async createProject(projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> {
     const { data, error } = await supabase
       .from('projects')

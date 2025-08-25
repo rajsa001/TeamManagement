@@ -10,6 +10,7 @@ import TaskForm from './TaskForm';
 import { Plus, Calendar, Building, CheckCircle2, Play, Clock } from 'lucide-react';
 import Badge from '../ui/Badge';
 import Card from '../ui/Card';
+import { Task } from '../../types';
 
 const ProjectTasksPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -34,6 +35,16 @@ const ProjectTasksPage: React.FC = () => {
   const handleAddTask = (task) => {
     addTask({ ...task, project_id: projectId });
     setIsTaskFormOpen(false);
+  };
+
+  // Wrapper function to handle status changes from TaskCard
+  const handleStatusChange = (id: string, status: Task['status']) => {
+    console.log('ProjectTasksPage: handleStatusChange called with:', { id, status });
+    try {
+      updateTask(id, { status });
+    } catch (error) {
+      console.error('Error updating task status:', error);
+    }
   };
 
   // Get current project details
@@ -269,7 +280,7 @@ const ProjectTasksPage: React.FC = () => {
               <TaskCard
                 task={task}
                 onDelete={deleteTask}
-                onStatusChange={updateTask}
+                onStatusChange={handleStatusChange}
                 showUser={true}
                 members={members}
                 admins={admins}

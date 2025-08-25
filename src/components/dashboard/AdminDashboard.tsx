@@ -1311,6 +1311,22 @@ const handleDeleteHoliday = async (holidayId: string) => {
   }
 
   if (activeTab === 'leaves') {
+    // Helper function to format dates
+    const formatDate = (dateString: string | null | undefined) => {
+      if (!dateString) return 'No date';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric',
+          weekday: 'short'
+        });
+      } catch (error) {
+        return dateString;
+      }
+    };
+
     // Group leaves by member
     const leavesByMember: { [memberId: string]: any[] } = {};
     leaves.forEach(l => {
@@ -1385,7 +1401,12 @@ const handleDeleteHoliday = async (holidayId: string) => {
                       <span className="font-medium">Type:</span> {leave.category === 'multi-day' ? 'Multi-day' : 'Single Day'}
                       {leave.category === 'multi-day' && leave.from_date && leave.to_date && (
                         <>
-                          <span className="mx-2">|</span><span className="font-medium">From:</span> {leave.from_date} <span className="font-medium">To:</span> {leave.to_date}
+                          <span className="mx-2">|</span><span className="font-medium">From:</span> {formatDate(leave.from_date)} <span className="font-medium">To:</span> {formatDate(leave.to_date)}
+                        </>
+                      )}
+                      {leave.category !== 'multi-day' && (leave.leave_date || leave.from_date) && (
+                        <>
+                          <span className="mx-2">|</span><span className="font-medium">Date:</span> {formatDate(leave.leave_date || leave.from_date)}
                         </>
                       )}
                       <span className="mx-2">|</span><span className="font-medium">Leave Type:</span> {leave.leave_type}
@@ -1524,7 +1545,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
                           memberLeaves.map(lv => (
                             <div key={lv.id} className="border rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50">
                               <div>
-                                <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${lv.from_date} to ${lv.to_date}` : lv.leave_date}
+                                <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${formatDate(lv.from_date)} to ${formatDate(lv.to_date)}` : formatDate(lv.leave_date || lv.from_date)}
                                 <span className="ml-2 text-xs">({lv.status})</span>
                                 {lv.approved_by && (lv.status === 'approved' || lv.status === 'rejected') && (
                                   <div className="text-xs text-gray-500 mt-1">
@@ -1646,7 +1667,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
                           pmLeaves.map(lv => (
                             <div key={lv.id} className="border rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50">
                               <div>
-                                <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${lv.from_date} to ${lv.to_date}` : lv.leave_date}
+                                <span className="font-semibold">{lv.leave_type}</span> - {lv.category === 'multi-day' ? `${formatDate(lv.from_date)} to ${formatDate(lv.to_date)}` : formatDate(lv.leave_date || lv.from_date)}
                                 <span className="ml-2 text-xs">({lv.status})</span>
                                 {lv.approved_by && (lv.status === 'approved' || lv.status === 'rejected') && (
                                   <div className="text-xs text-gray-500 mt-1">

@@ -15,7 +15,7 @@ import DashboardStats from './DashboardStats';
 import Modal from '../ui/Modal';
 import LeaveForm from './LeaveForm';
 import ProjectCard from './ProjectCard';
-import { useProjects } from '../../hooks/useProjects';
+import { useMemberProjects } from '../../hooks/useMemberProjects';
 import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
 import { toast } from 'sonner';
@@ -32,7 +32,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
   const { leaves, loading: leavesLoading, error: leavesError, addLeave, updateLeave, deleteLeave } = useLeaves();
   const { user } = useAuth();
-  const { projects, loading: projectsLoading, error: projectsError } = useProjects();
+  const { projects, loading: projectsLoading, error: projectsError } = useMemberProjects();
   
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
@@ -82,12 +82,12 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
   useEffect(() => {
     if (activeTab !== 'leaves' || !user) return;
     const fetchBalance = async () => {
-      const year = new Date().getFullYear();
+      const currentYear = new Date().getFullYear();
       const { data, error } = await supabase
         .from('member_leave_balances')
         .select('*')
         .eq('member_id', user.id)
-        .eq('year', year)
+        .eq('year', currentYear)
         .single();
       if (!error && data) {
         setLeaveBalance({
@@ -447,6 +447,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
               <TaskCard 
                 key={tasks[0].id} 
                 task={tasks[0]} 
+                showUser={true}
                 section={sectionName}
                 members={members}
                 admins={admins}
@@ -469,6 +470,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
                     <div key={task.id} className="h-80 flex">
                       <TaskCard 
                         task={task} 
+                        showUser={true}
                         section={sectionName}
                         members={members}
                         admins={admins}
@@ -523,13 +525,10 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     // Icons
     return (
       <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">
-        {/* Personalized greeting at the top */}
+        {/* Dashboard header */}
         <div className="flex items-center justify-between pt-4 pb-2">
-          <div className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <span>
-              Hey <span className="text-blue-600 font-extrabold animate-pulse">{memberName}</span>, {getGreeting()} 
-            </span>
-            <span className="animate-waving-hand text-3xl ml-1" role="img" aria-label="wave">👋</span>
+          <div className="text-2xl font-bold text-gray-900">
+            Dashboard
           </div>
         </div>
         <DashboardStats tasks={tasks} leaves={leaves} />
@@ -646,6 +645,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
                     <div key={task.id} className="flex h-[28rem]">
                       <TaskCard
                         task={task}
+                        showUser={true}
                         onDelete={deleteTask}
                         onStatusChange={handleStatusChange}
                         onUpdate={updateTask}
@@ -785,7 +785,10 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Projects</h1>
+            <p className="text-gray-600">Projects you have tasks assigned to</p>
+          </div>
         </div>
         {projectsError && <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">{projectsError}</div>}
         {projectsLoading ? (
@@ -806,68 +809,75 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
               </div>
             </Card>
 
-            {/* Filtered Projects Grid */}
-            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {projects
-                .filter(project => {
-                  const projectTasks = tasks.filter(task => task.project_id === project.id);
-                  if (projectTasks.length === 0) return false;
+            {/* Projects Grid */}
+            {projects.length === 0 ? (
+              <Card className="p-8 text-center">
+                <div className="text-gray-500">
+                  <p className="text-lg mb-2">No projects found</p>
+                  <p>You don't have any tasks assigned to projects yet.</p>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {projects
+                  .filter(project => {
+                    // Search filter
+                    if (projectFilters.search) {
+                      const searchTerm = projectFilters.search.toLowerCase();
+                      const matchesName = project.name.toLowerCase().includes(searchTerm);
+                      const matchesDescription = project.description?.toLowerCase().includes(searchTerm) || false;
+                      const matchesClient = project.client_name?.toLowerCase().includes(searchTerm) || false;
+                      if (!matchesName && !matchesDescription && !matchesClient) return false;
+                    }
 
-                  // Search filter
-                  if (projectFilters.search) {
-                    const searchTerm = projectFilters.search.toLowerCase();
-                    const matchesName = project.name.toLowerCase().includes(searchTerm);
-                    const matchesDescription = project.description?.toLowerCase().includes(searchTerm) || false;
-                    const matchesClient = project.client_name?.toLowerCase().includes(searchTerm) || false;
-                    if (!matchesName && !matchesDescription && !matchesClient) return false;
-                  }
+                    // Status filter
+                    if (projectFilters.status) {
+                      // Use the project's actual status from database if available
+                      if (project.status && project.status === projectFilters.status) {
+                        // Status matches exactly
+                      } else if (!project.status) {
+                        // Fallback to calculating status from tasks
+                        const projectTasks = tasks.filter(task => task.project_id === project.id);
+                        const completedTasks = projectTasks.filter(task => task.status === 'completed').length;
+                        const inProgressTasks = projectTasks.filter(task => task.status === 'in_progress').length;
+                        const projectStatus = completedTasks === projectTasks.length && projectTasks.length > 0 ? 'completed' : 
+                                            inProgressTasks > 0 ? 'in_progress' : 'pending';
+                        if (projectStatus !== projectFilters.status) return false;
+                      } else {
+                        // Project has status but it doesn't match filter
+                        return false;
+                      }
+                    }
 
-                  // Status filter
-                  if (projectFilters.status) {
-                    // Use the project's actual status from database if available
-                    if (project.status && project.status === projectFilters.status) {
-                      // Status matches exactly
-                    } else if (!project.status) {
-                      // Fallback to calculating status from tasks
-                      const completedTasks = projectTasks.filter(task => task.status === 'completed').length;
-                      const inProgressTasks = projectTasks.filter(task => task.status === 'in_progress').length;
-                      const projectStatus = completedTasks === projectTasks.length && projectTasks.length > 0 ? 'completed' : 
-                                          inProgressTasks > 0 ? 'in_progress' : 'pending';
-                      if (projectStatus !== projectFilters.status) return false;
-                    } else {
-                      // Project has status but it doesn't match filter
+                    // Client filter
+                    if (projectFilters.client && project.client_name !== projectFilters.client) {
                       return false;
                     }
-                  }
 
-                  // Client filter
-                  if (projectFilters.client && project.client_name !== projectFilters.client) {
-                    return false;
-                  }
-
-                  return true;
-                })
-                .sort((a, b) => {
-                  // Sort filter
-                  switch (projectFilters.dateSort) {
-                    case 'oldest':
-                      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
-                    case 'name_asc':
-                      return a.name.localeCompare(b.name);
-                    case 'name_desc':
-                      return b.name.localeCompare(a.name);
-                    case 'newest':
-                    default:
-                      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-                  }
-                })
-                .map(project => {
-                  const projectTasks = tasks.filter(task => task.project_id === project.id);
-                  return (
-                    <ProjectCard key={project.id} project={project} tasks={projectTasks} />
-                  );
-                })}
-            </div>
+                    return true;
+                  })
+                  .sort((a, b) => {
+                    // Sort filter
+                    switch (projectFilters.dateSort) {
+                      case 'oldest':
+                        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+                      case 'name_asc':
+                        return a.name.localeCompare(b.name);
+                      case 'name_desc':
+                        return b.name.localeCompare(a.name);
+                      case 'newest':
+                      default:
+                        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                    }
+                  })
+                  .map(project => {
+                    const projectTasks = tasks.filter(task => task.project_id === project.id);
+                    return (
+                      <ProjectCard key={project.id} project={project} tasks={projectTasks} />
+                    );
+                  })}
+              </div>
+            )}
           </>
         )}
       </div>

@@ -87,43 +87,53 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
   }, []);
 
   useEffect(() => {
-    // Fetch leave balance for the current user (supports both members and project managers)
+    // Fetch leave balance for the current user (supports members, admins, and project managers)
     const fetchLeaveBalance = async () => {
       if (!user?.id) return;
       
-             // First try to find balance for member
-       let { data, error } = await supabase
-         .from('member_leave_balances')
-         .select('sick_leaves, casual_leaves, paid_leaves')
-         .eq('member_id', user.id)
-         .eq('year', new Date().getFullYear())
-         .single();
-       
-       // If not found as member, try as admin
-       if (error || !data) {
-         const { data: adminData, error: adminError } = await supabase
-           .from('member_leave_balances')
-           .select('sick_leaves, casual_leaves, paid_leaves')
-           .eq('admin_id', user.id)
-           .eq('year', new Date().getFullYear())
-           .single();
-         
-         data = adminData;
-         error = adminError;
-       }
-       
-       // If not found as admin, try as project manager
-       if (error || !data) {
-         const { data: pmData, error: pmError } = await supabase
-           .from('member_leave_balances')
-           .select('sick_leaves, casual_leaves, paid_leaves')
-           .eq('project_manager_id', user.id)
-           .eq('year', new Date().getFullYear())
-           .single();
-         
-         data = pmData;
-         error = pmError;
-       }
+      // First try to find balance for member
+      let { data, error } = await supabase
+        .from('member_leave_balances')
+        .select('sick_leaves, casual_leaves, paid_leaves')
+        .eq('member_id', user.id)
+        .eq('year', new Date().getFullYear())
+        .single();
+      
+      // If not found as member, try as admin
+      if (error || !data) {
+        const { data: adminData, error: adminError } = await supabase
+          .from('member_leave_balances')
+          .select('sick_leaves, casual_leaves, paid_leaves')
+          .eq('admin_id', user.id)
+          .eq('year', new Date().getFullYear())
+          .single();
+        
+        data = adminData;
+        error = adminError;
+      }
+      
+      // If not found as admin, try as project manager in the correct table
+      if (error || !data) {
+        const { data: pmData, error: pmError } = await supabase
+          .from('project_manager_leave_balances')
+          .select('sick_leave, casual_leave, earned_leave')
+          .eq('project_manager_id', user.id)
+          .eq('year', new Date().getFullYear())
+          .single();
+        
+        if (!pmError && pmData) {
+          // Map the project manager leave balance fields to the expected format
+          setLeaveBalance({
+            sick_leaves: pmData.sick_leave,
+            casual_leaves: pmData.casual_leave,
+            paid_leaves: pmData.earned_leave,
+          });
+          return;
+        }
+        
+        data = pmData;
+        error = pmError;
+      }
       
       if (!error && data) {
         setLeaveBalance(data);

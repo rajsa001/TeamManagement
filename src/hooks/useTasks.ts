@@ -43,6 +43,7 @@ export const useTasks = () => {
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
     try {
+      console.log('useTasks: updateTask called with:', { id, updates });
       const { data, error } = await supabase
         .from('tasks')
         .update(updates)
@@ -51,9 +52,11 @@ export const useTasks = () => {
         .single();
 
       if (error) throw error;
+      console.log('useTasks: Task updated successfully:', data);
       setTasks(prev => prev.map(task => task.id === id ? data : task));
       return data;
     } catch (err) {
+      console.error('useTasks: Error updating task:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
     }
