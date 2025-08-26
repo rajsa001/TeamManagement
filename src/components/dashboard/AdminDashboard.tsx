@@ -888,7 +888,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
           <div className="text-gray-500">No {title.toLowerCase()}.</div>
         ) : (
           <>
-            <div className="h-80 flex">
+            <div className="h-96 flex">
             <TaskCard key={tasks[0].id} task={tasks[0]} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} members={members} admins={admins} projectManagers={projectManagers} />
             </div>
             {tasks.length > 1 && !openSections[sectionKey] && (
@@ -903,7 +903,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
               <>
                 <div className="space-y-4">
                   {tasks.slice(1).map(task => (
-                    <div key={task.id} className="h-80 flex">
+                    <div key={task.id} className="h-96 flex">
                       <TaskCard task={task} showUser={true} onDelete={() => {}} onStatusChange={() => {}} section={sectionName} members={members} admins={admins} projectManagers={projectManagers} />
                     </div>
                   ))}
