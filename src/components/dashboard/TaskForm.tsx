@@ -86,6 +86,25 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
     }
   }, [isOpen, initialProjectId]);
 
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        task_name: '',
+        description: '',
+        due_date: '',
+        user_id: user?.id || '',
+        project_id: initialProjectId || '',
+        priority: '' as Task['priority'],
+        status: '' as Task['status'],
+        progress: 0
+      });
+      setAttachments([]);
+      setUrlInput('');
+      setShowUrlInput(false);
+    }
+  }, [isOpen, user?.id, initialProjectId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const baseTask = {
@@ -94,7 +113,17 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
       attachments,
     };
     onSubmit(baseTask);
-         setFormData({ task_name: '', description: '', due_date: '', user_id: user?.id || '', project_id: '', priority: '', status: '', progress: 0 });
+    // Reset form after submission
+    setFormData({ 
+      task_name: '', 
+      description: '', 
+      due_date: '', 
+      user_id: user?.id || '', 
+      project_id: initialProjectId || '', 
+      priority: '' as Task['priority'], 
+      status: '' as Task['status'], 
+      progress: 0 
+    });
     setAttachments([]);
     setUrlInput('');
     setShowUrlInput(false);

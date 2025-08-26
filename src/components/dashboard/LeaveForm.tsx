@@ -65,6 +65,25 @@ const LeaveForm: React.FC<LeaveFormProps> = ({
     }
   }, [initialData, isOpen, selectedDate, user]);
 
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen && !initialData) {
+      setFormData({
+        category: 'single-day',
+        leave_date: '',
+        from_date: '',
+        to_date: '',
+        leave_type: 'casual',
+        reason: '',
+        brief_description: '',
+        user_id: user?.id || '',
+        end_date: '',
+        id: undefined,
+      });
+      setError('');
+    }
+  }, [isOpen, initialData, user?.id]);
+
   useEffect(() => {
     if (isOpen && user?.role === 'member' && !initialData) {
       setFormData(prev => ({ ...prev, user_id: user.id }));

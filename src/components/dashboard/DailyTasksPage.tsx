@@ -8,6 +8,7 @@ import Card from '../ui/Card';
 import { supabase } from '../../lib/supabase';
 import { authService } from '../../services/auth';
 import { useAuth } from '../../contexts/AuthContext';
+import { MemberDailyTaskStats } from './MemberDailyTaskStats';
 
 export const DailyTasksPage: React.FC = () => {
   const { user } = useAuth();
@@ -230,13 +231,13 @@ export const DailyTasksPage: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Member or Admin</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Member, Admin or Project Manager</label>
             <select
               value={filters.member || ''}
               onChange={(e) => setFilters(prev => ({ ...prev, member: e.target.value || undefined }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Members & Admins</option>
+              <option value="">All Users</option>
               {members.length > 0 && (
                 <optgroup label="Members">
                   {members.map((member) => (
@@ -251,6 +252,15 @@ export const DailyTasksPage: React.FC = () => {
                   {admins.map((admin) => (
                     <option key={admin.id} value={admin.id}>
                       {admin.name} (Admin)
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {projectManagers.length > 0 && (
+                <optgroup label="Project Managers">
+                  {projectManagers.map((pm) => (
+                    <option key={pm.id} value={pm.id}>
+                      {pm.name} (PM)
                     </option>
                   ))}
                 </optgroup>

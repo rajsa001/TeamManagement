@@ -85,6 +85,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     switch (status) {
       case 'completed': return 'success';
       case 'in_progress': return 'warning';
+      case 'pending': return 'pending';
       case 'not_started': return 'secondary';
       default: return 'secondary';
     }
@@ -240,8 +241,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
       accentColor = 'border-yellow-500';
       break;
     case 'pending':
-      borderClass = 'border-2 border-blue-400 bg-gradient-to-br from-blue-50 to-blue-100';
-      accentColor = 'border-blue-500';
+      borderClass = 'border-2 border-purple-400 bg-gradient-to-br from-purple-50 to-purple-100';
+      accentColor = 'border-purple-500';
       break;
     case 'not_started':
       accentColor = 'border-gray-400';
@@ -322,9 +323,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
         <div className="mb-4">
           <h3 className="font-semibold text-lg text-gray-900 mb-1 group-hover:text-blue-700 transition-colors duration-200 truncate">{task.task_name}</h3>
           <p className="text-sm text-gray-600 mb-1 line-clamp-2 break-words">{task.description}</p>
-          {task.project && (
-            <div className="text-xs text-blue-700 mt-1 truncate">Project: {task.project.name}</div>
-        )}
+          {task.project_id && projects && projects.length > 0 && (
+            <div className="text-xs text-blue-700 mt-1 truncate">
+              Project: {projects.find(p => p.id === task.project_id)?.name || 'Unknown Project'}
+            </div>
+          )}
       </div>
 
       <div className="flex items-center justify-between mb-2">
@@ -677,14 +680,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                 </div>
 
-                                 {task.project && (
+                                 {task.project_id && projects && projects.length > 0 && (
                    <div className="flex items-center">
                      <div className="w-5 h-5 bg-blue-100 rounded mr-3 flex items-center justify-center">
                        <span className="text-xs text-blue-600 font-bold">P</span>
                      </div>
                      <div>
                        <p className="text-sm font-medium text-gray-700">Project</p>
-                       <p className="text-sm text-gray-900">{task.project.name}</p>
+                       <p className="text-sm text-gray-900">{projects.find(p => p.id === task.project_id)?.name || 'Unknown Project'}</p>
                      </div>
                    </div>
                  )}

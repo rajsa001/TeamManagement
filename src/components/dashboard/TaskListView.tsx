@@ -39,7 +39,7 @@ const TaskListView: React.FC<TaskListViewProps> = ({
     switch (status) {
       case 'completed': return 'success';
       case 'in_progress': return 'warning';
-      case 'pending': return 'secondary';
+      case 'pending': return 'pending';
       default: return 'secondary';
     }
   };

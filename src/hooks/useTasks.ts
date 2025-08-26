@@ -107,12 +107,36 @@ export const useTasks = () => {
         }
       }
       
-
-      
       return true;
     });
 
-    // Sort by due date if specified
+    // Sort tasks: pending/in-progress on top, completed below
+    filteredTasks.sort((a, b) => {
+      // Define priority order: pending/in-progress first, then completed
+      const getStatusPriority = (status: string) => {
+        if (status === 'pending' || status === 'in_progress' || status === 'not_started') {
+          return 1; // Higher priority (appears first)
+        } else if (status === 'completed') {
+          return 2; // Lower priority (appears last)
+        }
+        return 3; // Other statuses (blocked, cancelled, etc.)
+      };
+
+      const priorityA = getStatusPriority(a.status);
+      const priorityB = getStatusPriority(b.status);
+
+      // If status priorities are different, sort by status priority
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // If status priorities are the same, sort by due date (earliest first)
+      const dateA = new Date(a.due_date).getTime();
+      const dateB = new Date(b.due_date).getTime();
+      return dateA - dateB;
+    });
+
+    // Apply due date sort if specified (this will override the default sorting)
     if (filters.dueDateSort) {
       filteredTasks.sort((a, b) => {
         const dateA = new Date(a.due_date).getTime();

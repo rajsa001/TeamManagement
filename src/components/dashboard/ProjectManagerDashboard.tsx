@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Modal from '../ui/Modal';
 import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
+import { useDailyTasks } from '../../hooks/useDailyTasks';
 import { TaskFilters } from '../../types';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -28,6 +29,9 @@ import LeaveForm from './LeaveForm';
 import TaskViewSelector, { TaskViewType } from './TaskViewSelector';
 import TaskListView from './TaskListView';
 import TaskCalendarView from './TaskCalendarView';
+import { MemberTaskStats } from './MemberTaskStats';
+import { MemberDailyTaskStats } from './MemberDailyTaskStats';
+import { TaskQuickStats } from './TaskQuickStats';
 
 interface ProjectManagerDashboardProps {
   activeTab: string;
@@ -38,6 +42,7 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
   const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
   const { leaves, loading: leavesLoading, error: leavesError, addLeave, deleteLeave, updateLeave, setLeaves } = useLeaves();
   const { projects, loading: projectsLoading, error: projectsError, addProject, updateProject, deleteProject, fetchProjects } = useProjects();
+  const { tasks: dailyTasks, loading: dailyTasksLoading } = useDailyTasks({});
   const [assignedProjects, setAssignedProjects] = useState<Project[]>([]);
   const [assignedProjectsLoading, setAssignedProjectsLoading] = useState(true);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -58,6 +63,19 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
     start_date: '',
     expected_end_date: ''
   });
+
+  // Reset project form when modal closes
+  useEffect(() => {
+    if (!isProjectFormOpen) {
+      setProjectForm({
+        name: '',
+        description: '',
+        client_name: '',
+        start_date: '',
+        expected_end_date: ''
+      });
+    }
+  }, [isProjectFormOpen]);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const { user } = useAuth();
@@ -652,6 +670,28 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
           {renderTaskSection('Upcoming Tasks', Clock, upcomingTasks, 'upcoming', 'upcoming')}
           {renderTaskSection('Blocked Tasks', AlertCircle, blockedTasks, 'blocked', 'blocked')}
         </div>
+
+        {/* Member Task Statistics */}
+        <h2 className="text-xl font-semibold text-gray-800 mt-10 mb-2">Member Task Statistics</h2>
+        <MemberTaskStats 
+          tasks={filteredTasks}
+          members={members}
+          admins={admins}
+          projectManagers={projectManagers}
+          currentUserId={user?.id}
+          showOnlyCurrentUser={false}
+        />
+
+        {/* Member Daily Task Statistics */}
+        <h2 className="text-xl font-semibold text-gray-800 mt-10 mb-2">Member Daily Task Statistics</h2>
+        <MemberDailyTaskStats 
+          dailyTasks={dailyTasks}
+          members={members}
+          admins={admins}
+          projectManagers={projectManagers}
+          currentUserId={user?.id}
+          showOnlyCurrentUser={false}
+        />
         {/* Notifications summary at the top */}
         {pmNotifications.length > 0 && (
           <Card className="mb-6 p-4 border border-blue-200 bg-blue-50">
@@ -708,6 +748,9 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
             </Button>
           </div>
         </div>
+
+        {/* Quick Stats Section */}
+        <TaskQuickStats tasks={filteredTasksForDisplay} />
 
         {/* Filters Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

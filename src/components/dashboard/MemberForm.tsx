@@ -51,6 +51,21 @@ const MemberForm: React.FC<MemberFormProps> = ({ isOpen, onClose, onSuccess, ini
     }
   }, [initialData, isOpen]);
 
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen && !initialData) {
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        phone: '',
+        department: '',
+        hire_date: '',
+      });
+      setError('');
+    }
+  }, [isOpen, initialData]);
+
   const isEdit = !!initialData;
 
   const handleSubmit = async (e: React.FormEvent) => {

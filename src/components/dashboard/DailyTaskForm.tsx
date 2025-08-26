@@ -4,7 +4,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { fileUploadService } from '../../services/fileUpload';
 import { authService } from '../../services/auth';
-import { Paperclip, X, Link, File } from 'lucide-react';
+import { Paperclip, X, Link, File, Upload } from 'lucide-react';
 
 interface DailyTaskFormProps {
   isOpen: boolean;
@@ -45,6 +45,10 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [adminsLoading, setAdminsLoading] = useState(false);
   const [adminsError, setAdminsError] = useState('');
+  
+  // Drag and drop states
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -68,7 +72,27 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
       });
       setAttachments([]);
     }
-  }, [task, currentUserId, isAdmin, members]);
+  }, [task, currentUserId, isAdmin, members, isOpen]);
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        task_name: '',
+        description: '',
+        priority: 'medium',
+        user_id: isAdmin ? (members.length > 0 ? members[0].id : currentUserId) : currentUserId,
+        tags: [],
+        task_date: new Date().toISOString().split('T')[0]
+      });
+      setAttachments([]);
+      setTagInput('');
+      setUrlInput('');
+      setShowUrlInput(false);
+      setIsDragOver(false);
+      setIsUploading(false);
+    }
+  }, [isOpen, currentUserId, isAdmin, members]);
 
   // Fetch admins when component mounts or when isAdmin changes
 
@@ -120,43 +144,72 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      for (const file of Array.from(files)) {
-        let tempAttachment: TaskAttachment | null = null;
-        try {
-          // Validate file
-          const validation = fileUploadService.validateFile(file);
-          if (!validation.isValid) {
-            alert(validation.error);
-            continue;
-          }
+      await uploadFiles(Array.from(files));
+    }
+  };
 
-          // Show loading state
-          tempAttachment = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-            name: file.name,
-            url: URL.createObjectURL(file), // Temporary URL for preview
-            type: 'file',
-            file_type: file.type,
-            size: file.size,
-            uploaded_at: new Date().toISOString()
-          };
-          setAttachments(prev => [...prev, tempAttachment!]);
+  const uploadFiles = async (files: File[]) => {
+    setIsUploading(true);
+    
+    for (const file of files) {
+      let tempAttachment: TaskAttachment | null = null;
+      try {
+        // Validate file
+        const validation = fileUploadService.validateFile(file);
+        if (!validation.isValid) {
+          alert(validation.error);
+          continue;
+        }
 
-          // Upload to Supabase Storage
-          const uploadedAttachment = await fileUploadService.uploadFile(file, currentUserId);
-          
-          // Replace temporary attachment with real one
-          setAttachments(prev => prev.map(att => 
-            att.id === tempAttachment!.id ? uploadedAttachment : att
-          ));
-        } catch (error) {
-          alert(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          // Remove temporary attachment if upload failed
-          if (tempAttachment) {
-            setAttachments(prev => prev.filter(att => att.id !== tempAttachment!.id));
-          }
+        // Show loading state
+        tempAttachment = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          url: URL.createObjectURL(file), // Temporary URL for preview
+          type: 'file',
+          file_type: file.type,
+          size: file.size,
+          uploaded_at: new Date().toISOString()
+        };
+        setAttachments(prev => [...prev, tempAttachment!]);
+
+        // Upload to Supabase Storage
+        const uploadedAttachment = await fileUploadService.uploadFile(file, currentUserId);
+        
+        // Replace temporary attachment with real one
+        setAttachments(prev => prev.map(att => 
+          att.id === tempAttachment!.id ? uploadedAttachment : att
+        ));
+      } catch (error) {
+        alert(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Remove temporary attachment if upload failed
+        if (tempAttachment) {
+          setAttachments(prev => prev.filter(att => att.id !== tempAttachment!.id));
         }
       }
+    }
+    
+    setIsUploading(false);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      await uploadFiles(files);
     }
   };
 
@@ -349,24 +402,60 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-3">
             📎 Attachments <span className="text-xs text-gray-500">(Optional)</span>
           </label>
-          <div className="flex space-x-3 mb-3">
+          
+          {/* Drag and Drop Zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
+              isDragOver 
+                ? 'border-blue-500 bg-blue-50' 
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <Upload className={`w-8 h-8 mx-auto mb-2 ${isDragOver ? 'text-blue-500' : 'text-gray-400'}`} />
+            <p className={`text-sm ${isDragOver ? 'text-blue-600' : 'text-gray-600'}`}>
+              {isDragOver ? 'Drop files here' : 'Drag and drop files here, or click to browse'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Supports images, PDFs, documents, and spreadsheets (max 50MB)
+            </p>
+            {isUploading && (
+              <div className="mt-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="text-xs text-gray-500 mt-1">Uploading...</p>
+              </div>
+            )}
+          </div>
+          
+          {/* Attachment Controls */}
+          <div className="flex space-x-2 mt-3">
             <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 shadow-sm"
+              className="flex items-center space-x-1"
+              disabled={isUploading}
             >
               <Paperclip className="w-4 h-4" />
-              <span className="font-medium">Upload File</span>
+              <span>Browse Files</span>
             </Button>
             <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setShowUrlInput(!showUrlInput)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors duration-200 shadow-sm"
+              className="flex items-center space-x-1"
+              disabled={isUploading}
             >
               <Link className="w-4 h-4" />
-              <span className="font-medium">Add URL</span>
+              <span>Add URL</span>
             </Button>
           </div>
+
+          {/* Hidden file input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -375,53 +464,61 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
             className="hidden"
             accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx"
           />
+
+          {/* URL Input */}
           {showUrlInput && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-3">
-              <div className="flex space-x-3">
-                <input
-                  type="url"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="Enter URL (e.g., https://example.com/document.pdf)..."
-                  className="flex-1 px-4 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                />
-                <Button
-                  type="button"
-                  onClick={handleUrlAdd}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm"
-                >
-                  Add URL
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setShowUrlInput(false)}
-                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 shadow-sm"
-                >
-                  Cancel
-                </Button>
-              </div>
-              <p className="text-xs text-green-600 mt-2">💡 Add links to external documents, images, or resources</p>
+            <div className="flex space-x-2 mb-3">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="Enter URL (e.g., https://example.com/document.pdf)"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleUrlAdd}
+                disabled={!urlInput.trim()}
+              >
+                Add
+              </Button>
             </div>
           )}
+
+          {/* Attachments List */}
           {attachments.length > 0 && (
             <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Attached Files:</p>
               {attachments.map((attachment) => (
-                <div key={attachment.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                <div
+                  key={attachment.id}
+                  className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                >
                   <div className="flex items-center space-x-2">
                     {attachment.type === 'file' ? (
-                      <File className="w-4 h-4 text-gray-500" />
+                      <File className="w-4 h-4 text-blue-500" />
                     ) : (
-                      <Link className="w-4 h-4 text-gray-500" />
+                      <Link className="w-4 h-4 text-green-500" />
                     )}
-                    <span className="text-sm text-gray-700 truncate">{attachment.name}</span>
+                    <span className="text-sm text-gray-700 truncate">
+                      {attachment.name}
+                    </span>
+                    {attachment.size && (
+                      <span className="text-xs text-gray-500">
+                        ({(attachment.size / 1024).toFixed(1)} KB)
+                      </span>
+                    )}
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removeAttachment(attachment.id)}
                     className="text-red-500 hover:text-red-700"
                   >
                     <X className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>

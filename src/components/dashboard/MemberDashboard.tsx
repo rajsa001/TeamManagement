@@ -23,6 +23,7 @@ import { MemberDailyTasksPage } from './MemberDailyTasksPage';
 import TaskViewSelector, { TaskViewType } from './TaskViewSelector';
 import TaskListView from './TaskListView';
 import TaskCalendarView from './TaskCalendarView';
+import { MemberTaskStats } from './MemberTaskStats';
 
 interface MemberDashboardProps {
   activeTab: string;
