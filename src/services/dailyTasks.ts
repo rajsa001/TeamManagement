@@ -26,12 +26,39 @@ export const dailyTasksService = {
     if (filters.priority) {
       query = query.eq('priority', filters.priority);
     }
+    if (filters.project) {
+      query = query.eq('project_id', filters.project);
+    }
     if (filters.search) {
       query = query.or(`task_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
     }
 
     const { data, error } = await query;
     if (error) throw error;
+    
+    // If we have tasks with project_id, fetch project information separately
+    if (data && data.length > 0) {
+      const projectIds = [...new Set(data.filter(task => task.project_id).map(task => task.project_id))];
+      
+      if (projectIds.length > 0) {
+        const { data: projectsData, error: projectsError } = await supabase
+          .from('projects')
+          .select('id, name, description, client_name, status')
+          .in('id', projectIds);
+        
+        if (!projectsError && projectsData) {
+          const projectsMap = new Map(projectsData.map(project => [project.id, project]));
+          
+          // Attach project data to tasks
+          data.forEach(task => {
+            if (task.project_id && projectsMap.has(task.project_id)) {
+              task.project = projectsMap.get(task.project_id);
+            }
+          });
+        }
+      }
+    }
+    
     return data || [];
   },
 
@@ -53,6 +80,30 @@ export const dailyTasksService = {
 
     const { data, error } = await query;
     if (error) throw error;
+    
+    // If we have tasks with project_id, fetch project information separately
+    if (data && data.length > 0) {
+      const projectIds = [...new Set(data.filter(task => task.project_id).map(task => task.project_id))];
+      
+      if (projectIds.length > 0) {
+        const { data: projectsData, error: projectsError } = await supabase
+          .from('projects')
+          .select('id, name, description, client_name, status')
+          .in('id', projectIds);
+        
+        if (!projectsError && projectsData) {
+          const projectsMap = new Map(projectsData.map(project => [project.id, project]));
+          
+          // Attach project data to tasks
+          data.forEach(task => {
+            if (task.project_id && projectsMap.has(task.project_id)) {
+              task.project = projectsMap.get(task.project_id);
+            }
+          });
+        }
+      }
+    }
+    
     return data || [];
   },
 
@@ -69,6 +120,20 @@ export const dailyTasksService = {
       .single();
 
     if (error) throw error;
+    
+    // If the task has a project_id, fetch the project information
+    if (data && data.project_id) {
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('id, name, description, client_name, status')
+        .eq('id', data.project_id)
+        .single();
+      
+      if (!projectError && projectData) {
+        data.project = projectData;
+      }
+    }
+    
     return data;
   },
 
@@ -86,6 +151,20 @@ export const dailyTasksService = {
       .single();
 
     if (error) throw error;
+    
+    // If the task has a project_id, fetch the project information
+    if (data && data.project_id) {
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('id, name, description, client_name, status')
+        .eq('id', data.project_id)
+        .single();
+      
+      if (!projectError && projectData) {
+        data.project = projectData;
+      }
+    }
+    
     return data;
   },
 

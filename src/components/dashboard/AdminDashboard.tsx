@@ -35,6 +35,7 @@ import TaskCalendarView from './TaskCalendarView';
 import { MemberTaskStats } from './MemberTaskStats';
 import { MemberDailyTaskStats } from './MemberDailyTaskStats';
 import { TaskQuickStats } from './TaskQuickStats';
+import { WebhookSettings } from './WebhookSettings';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -2166,6 +2167,24 @@ const handleDeleteHoliday = async (holidayId: string) => {
             </div>
           </div>
         </Card>
+
+        {/* Webhook Settings - Only for Super Admin */}
+        {isSuperAdmin && <WebhookSettings />}
+        
+        {/* Show message if not super admin */}
+        {!isSuperAdmin && user?.role === 'admin' && (
+          <Card className="max-w-md mx-auto p-6 bg-blue-50">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">Webhook Settings</h3>
+              <p className="text-sm text-blue-700 mb-4">
+                Webhook settings are only available to the Super Administrator.
+              </p>
+              <p className="text-xs text-blue-600">
+                Please log in with the super admin account to access webhook controls.
+              </p>
+            </div>
+          </Card>
+        )}
         {/* Edit Profile Modal */}
         <Modal isOpen={editProfileOpen} onClose={() => setEditProfileOpen(false)} title="Edit Profile">
           <form onSubmit={handleProfileUpdate} className="space-y-4">

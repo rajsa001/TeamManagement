@@ -161,6 +161,12 @@ export const DailyTaskCard: React.FC<DailyTaskCardProps> = ({
           </div>
         </div>
 
+        {task.project && (
+          <div className="text-sm text-gray-500 mb-3">
+            <span className="font-medium">Project:</span> {task.project.name}
+          </div>
+        )}
+
         {task.tags && task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-3">
             {task.tags.map((tag, index) => (
@@ -313,6 +319,18 @@ export const DailyTaskCard: React.FC<DailyTaskCardProps> = ({
                     <div>
                       <p className="text-sm font-medium text-gray-700">Created By</p>
                       <p className="text-sm text-gray-900">{task.created_by_user.name}</p>
+                    </div>
+                  </div>
+                )}
+
+                {task.project && (
+                  <div className="flex items-center">
+                    <div className="w-5 h-5 bg-blue-100 rounded mr-3 flex items-center justify-center">
+                      <span className="text-xs text-blue-600 font-bold">P</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Project</p>
+                      <p className="text-sm text-gray-900">{task.project.name}</p>
                     </div>
                   </div>
                 )}

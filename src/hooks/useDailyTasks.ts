@@ -41,6 +41,9 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       if (filters.priority) {
         query = query.eq('priority', filters.priority);
       }
+      if (filters.project) {
+        query = query.eq('project_id', filters.project);
+      }
       if (filters.search) {
         query = query.or(`task_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
       }
@@ -57,9 +60,10 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
         setError(error.message || 'Failed to fetch daily tasks');
         setTasks([]);
       } else {
-        // Fetch user information for all tasks
+        // Fetch user and project information for all tasks
         const tasksWithUsers = await fetchUserDataForTasks(data || []);
-        setTasks(tasksWithUsers);
+        const tasksWithProjects = await fetchProjectDataForTasks(tasksWithUsers);
+        setTasks(tasksWithProjects);
       }
     } catch (err) {
       console.error('Error in fetchTasks:', err);
@@ -68,7 +72,7 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.member, filters.date, filters.priority, filters.search, user?.id, user?.role]);
+  }, [filters.status, filters.member, filters.date, filters.priority, filters.project, filters.search, user?.id, user?.role]);
 
   // Function to fetch user data for tasks
   const fetchUserDataForTasks = async (tasks: any[]): Promise<DailyTask[]> => {
@@ -129,6 +133,52 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
       return tasks.map(task => ({
         ...task,
         user: null
+      }));
+    }
+  };
+
+  // Function to fetch project data for tasks
+  const fetchProjectDataForTasks = async (tasks: DailyTask[]): Promise<DailyTask[]> => {
+    if (!tasks.length) return [];
+    
+    try {
+      // Get unique project IDs from tasks
+      const projectIds = [...new Set(tasks.filter(task => task.project_id).map(task => task.project_id))];
+      
+      if (projectIds.length === 0) {
+        return tasks; // No projects to fetch
+      }
+      
+      // Fetch project data
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('id, name, description, client_name, status')
+        .in('id', projectIds);
+      
+      if (projectsError) {
+        console.error('Error fetching project data:', projectsError);
+        return tasks; // Return tasks without project data if there's an error
+      }
+      
+      // Create a map of project data
+      const projectMap = new Map();
+      if (projectsData) {
+        projectsData.forEach(project => {
+          projectMap.set(project.id, project);
+        });
+      }
+      
+      // Attach project data to tasks
+      return tasks.map(task => ({
+        ...task,
+        project: task.project_id ? projectMap.get(task.project_id) || null : null
+      }));
+    } catch (error) {
+      console.error('Error fetching project data for tasks:', error);
+      // Return tasks without project data if there's an error
+      return tasks.map(task => ({
+        ...task,
+        project: null
       }));
     }
   };

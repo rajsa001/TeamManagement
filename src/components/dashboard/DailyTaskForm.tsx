@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DailyTask, Member, Admin, TaskAttachment } from '../../types';
+import { DailyTask, Member, Admin, TaskAttachment, Project } from '../../types';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { fileUploadService } from '../../services/fileUpload';
 import { authService } from '../../services/auth';
+import { projectService } from '../../services/projects';
 import { Paperclip, X, Link, File, Upload } from 'lucide-react';
 
 interface DailyTaskFormProps {
@@ -35,7 +36,8 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
     priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
     user_id: isAdmin ? (members.length > 0 ? members[0].id : currentUserId) : currentUserId,
     tags: [] as string[],
-    task_date: new Date().toISOString().split('T')[0]
+    task_date: new Date().toISOString().split('T')[0],
+    project_id: '' as string
   });
   const [loading, setLoading] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -45,6 +47,8 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [adminsLoading, setAdminsLoading] = useState(false);
   const [adminsError, setAdminsError] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   
   // Drag and drop states
   const [isDragOver, setIsDragOver] = useState(false);
@@ -58,7 +62,8 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         priority: task.priority,
         user_id: task.user_id,
         tags: task.tags || [],
-        task_date: task.task_date
+        task_date: task.task_date,
+        project_id: task.project_id || ''
       });
       setAttachments(task.attachments || []);
     } else {
@@ -68,7 +73,8 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         priority: 'medium',
         user_id: isAdmin ? (members.length > 0 ? members[0].id : currentUserId) : currentUserId,
         tags: [],
-        task_date: new Date().toISOString().split('T')[0]
+        task_date: new Date().toISOString().split('T')[0],
+        project_id: ''
       });
       setAttachments([]);
     }
@@ -83,7 +89,8 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
         priority: 'medium',
         user_id: isAdmin ? (members.length > 0 ? members[0].id : currentUserId) : currentUserId,
         tags: [],
-        task_date: new Date().toISOString().split('T')[0]
+        task_date: new Date().toISOString().split('T')[0],
+        project_id: ''
       });
       setAttachments([]);
       setTagInput('');
@@ -93,6 +100,25 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
       setIsUploading(false);
     }
   }, [isOpen, currentUserId, isAdmin, members]);
+
+  // Fetch projects when component mounts
+  useEffect(() => {
+    const fetchProjects = async () => {
+      setProjectsLoading(true);
+      try {
+        const projectsData = await projectService.getProjects();
+        setProjects(projectsData);
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+      } finally {
+        setProjectsLoading(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchProjects();
+    }
+  }, [isOpen]);
 
   // Fetch admins when component mounts or when isAdmin changes
 
@@ -111,6 +137,7 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
     try {
       await onSubmit({
         ...formData,
+        project_id: formData.project_id || null, // Convert empty string to null
         created_by: currentUserId,
         status: 'pending',
         attachments,
@@ -338,6 +365,28 @@ export const DailyTaskForm: React.FC<DailyTaskFormProps> = ({
             <option value="high">High</option>
             <option value="urgent">Urgent</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Project (Optional)
+          </label>
+          {projectsLoading ? (
+            <div className="text-sm text-gray-500">Loading projects...</div>
+          ) : (
+            <select
+              value={formData.project_id}
+              onChange={(e) => setFormData(prev => ({ ...prev, project_id: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a project (optional)</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>

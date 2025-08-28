@@ -109,7 +109,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ isOpen, onClose, onSubmit, initialP
     e.preventDefault();
     const baseTask = {
       ...formData,
-      created_by: formData.user_id,
+      created_by: user?.id || '',
       attachments,
     };
     onSubmit(baseTask);

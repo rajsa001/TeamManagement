@@ -59,6 +59,7 @@ export interface TaskAttachment {
 export interface Task {
   id: string;
   user_id: string;
+  created_by: string;
   task_name: string;
   description: string;
   due_date: string;
@@ -135,6 +136,8 @@ export interface DailyTask {
   updated_at: string;
   is_active: boolean;
   task_date: string;
+  project_id?: string;
+  project?: Project;
   user?: Member;
   created_by_user?: Member | null;
 }
@@ -145,4 +148,5 @@ export interface DailyTaskFilters {
   date?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   search?: string;
+  project?: string;
 }

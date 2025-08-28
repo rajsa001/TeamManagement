@@ -2,25 +2,40 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTasks } from '../../hooks/useTasks';
 import { useProjects } from '../../hooks/useProjects';
+import { useDailyTasks } from '../../hooks/useDailyTasks';
 import { authService } from '../../services/auth';
+import { useAuth } from '../../contexts/AuthContext';
 import TaskCard from './TaskCard';
 import TaskFiltersComponent from './TaskFilters';
 import Button from '../ui/Button';
 import TaskForm from './TaskForm';
-import { Plus, Calendar, Building, CheckCircle2, Play, Clock } from 'lucide-react';
+import { DailyTaskCard } from './DailyTaskCard';
+import { DailyTaskForm } from './DailyTaskForm';
+import { Plus, Calendar, Building, CheckCircle2, Play, Clock, Clock3 } from 'lucide-react';
 import Badge from '../ui/Badge';
 import Card from '../ui/Card';
-import { Task } from '../../types';
+import { Task, DailyTask } from '../../types';
 
 const ProjectTasksPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const { user } = useAuth();
   const { tasks, addTask, updateTask, deleteTask, filterTasks } = useTasks();
   const { projects } = useProjects();
+  const { 
+    tasks: dailyTasks, 
+    createTask: createDailyTask, 
+    updateTask: updateDailyTask, 
+    deleteTask: deleteDailyTask,
+    markCompleted: markDailyCompleted,
+    markSkipped: markDailySkipped,
+    markPending: markDailyPending
+  } = useDailyTasks({ project: projectId });
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [admins, setAdmins] = useState<{ id: string; name: string }[]>([]);
   const [taskFilters, setTaskFilters] = useState({ project: projectId });
   const filteredTasks = filterTasks({ ...taskFilters, project: projectId });
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [isDailyTaskFormOpen, setIsDailyTaskFormOpen] = useState(false);
 
   React.useEffect(() => {
     Promise.all([
@@ -35,6 +50,36 @@ const ProjectTasksPage: React.FC = () => {
   const handleAddTask = (task) => {
     addTask({ ...task, project_id: projectId });
     setIsTaskFormOpen(false);
+  };
+
+  const handleAddDailyTask = async (taskData: Omit<DailyTask, 'id' | 'created_at' | 'updated_at' | 'user' | 'created_by_user'>) => {
+    try {
+      await createDailyTask({
+        ...taskData,
+        project_id: projectId
+      });
+      setIsDailyTaskFormOpen(false);
+    } catch (error) {
+      console.error('Error creating daily task:', error);
+    }
+  };
+
+  const handleDailyTaskStatusChange = async (id: string, status: 'pending' | 'completed' | 'skipped') => {
+    try {
+      switch (status) {
+        case 'completed':
+          await markDailyCompleted(id);
+          break;
+        case 'skipped':
+          await markDailySkipped(id);
+          break;
+        case 'pending':
+          await markDailyPending(id);
+          break;
+      }
+    } catch (error) {
+      console.error('Error changing daily task status:', error);
+    }
   };
 
   // Wrapper function to handle status changes from TaskCard
@@ -56,6 +101,12 @@ const ProjectTasksPage: React.FC = () => {
   const inProgressTasks = filteredTasks.filter(task => task.status === 'in_progress').length;
   const pendingTasks = filteredTasks.filter(task => task.status === 'pending').length;
   const progressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Calculate daily task statistics
+  const totalDailyTasks = dailyTasks.length;
+  const completedDailyTasks = dailyTasks.filter(task => task.status === 'completed').length;
+  const pendingDailyTasks = dailyTasks.filter(task => task.status === 'pending').length;
+  const skippedDailyTasks = dailyTasks.filter(task => task.status === 'skipped').length;
 
   // Get project status
   const getProjectStatus = () => {
@@ -189,7 +240,7 @@ const ProjectTasksPage: React.FC = () => {
             </div>
 
             {/* Task Statistics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-white/70 rounded-xl p-5 text-center border border-white/50 backdrop-blur-sm hover:bg-white/80 transition-colors">
                 <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
                   <span className="text-xl font-bold text-white">{totalTasks}</span>
@@ -213,6 +264,34 @@ const ProjectTasksPage: React.FC = () => {
                   <span className="text-xl font-bold text-white">{pendingTasks}</span>
                 </div>
                 <div className="text-sm font-semibold text-gray-800">Pending</div>
+              </div>
+            </div>
+
+            {/* Daily Task Statistics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white/70 rounded-xl p-5 text-center border border-white/50 backdrop-blur-sm hover:bg-white/80 transition-colors">
+                <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+                  <span className="text-xl font-bold text-white">{totalDailyTasks}</span>
+                </div>
+                <div className="text-sm font-semibold text-gray-800">Daily Tasks</div>
+              </div>
+              <div className="bg-white/70 rounded-xl p-5 text-center border border-white/50 backdrop-blur-sm hover:bg-white/80 transition-colors">
+                <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+                  <span className="text-xl font-bold text-white">{completedDailyTasks}</span>
+                </div>
+                <div className="text-sm font-semibold text-gray-800">Completed</div>
+              </div>
+              <div className="bg-white/70 rounded-xl p-5 text-center border border-white/50 backdrop-blur-sm hover:bg-white/80 transition-colors">
+                <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+                  <span className="text-xl font-bold text-white">{pendingDailyTasks}</span>
+                </div>
+                <div className="text-sm font-semibold text-gray-800">Pending</div>
+              </div>
+              <div className="bg-white/70 rounded-xl p-5 text-center border border-white/50 backdrop-blur-sm hover:bg-white/80 transition-colors">
+                <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+                  <span className="text-xl font-bold text-white">{skippedDailyTasks}</span>
+                </div>
+                <div className="text-sm font-semibold text-gray-800">Skipped</div>
               </div>
             </div>
           </div>
@@ -291,6 +370,63 @@ const ProjectTasksPage: React.FC = () => {
           </div>
         )}
 
+        {/* Daily Tasks Section */}
+        <div className="space-y-6">
+          {/* Daily Tasks Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Daily Tasks</h2>
+              <p className="text-gray-600">Quick daily tasks and activities for this project</p>
+            </div>
+            <Button 
+              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 px-6 py-3"
+              onClick={() => setIsDailyTaskFormOpen(true)} 
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add Daily Task
+            </Button>
+          </div>
+
+          {/* Daily Tasks Grid */}
+          {dailyTasks.length === 0 ? (
+            <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+              <div className="text-center py-16">
+                <div className="w-24 h-24 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                  <Clock3 className="w-12 h-12 text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">No daily tasks found</h3>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                  No daily tasks have been created for this project yet. Create quick daily tasks to track ongoing activities.
+                </p>
+                <Button 
+                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 px-8 py-3"
+                  onClick={() => setIsDailyTaskFormOpen(true)} 
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create First Daily Task
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {dailyTasks.map(task => (
+                <div key={task.id} className="group">
+                  <DailyTaskCard
+                    task={task}
+                    onDelete={deleteDailyTask}
+                    onStatusChange={handleDailyTaskStatusChange}
+                    onEdit={(task) => {
+                      // Handle edit if needed
+                      console.log('Edit daily task:', task);
+                    }}
+                    isAdmin={true}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Task Form Modal */}
       {isTaskFormOpen && (
         <TaskForm
@@ -298,6 +434,19 @@ const ProjectTasksPage: React.FC = () => {
           onClose={() => setIsTaskFormOpen(false)}
           onSubmit={handleAddTask}
           initialProjectId={projectId}
+        />
+      )}
+
+        {/* Daily Task Form Modal */}
+      {isDailyTaskFormOpen && (
+        <DailyTaskForm
+          isOpen={isDailyTaskFormOpen}
+          onClose={() => setIsDailyTaskFormOpen(false)}
+          onSubmit={handleAddDailyTask}
+          members={members}
+          admins={admins}
+          currentUserId={user?.id || ''}
+          isAdmin={true}
         />
       )}
       </div>
