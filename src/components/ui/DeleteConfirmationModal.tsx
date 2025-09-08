@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Trash2, User, Calendar, Tag } from 'lucide-react';
-import { Modal } from './Modal';
-import { Button } from './Button';
+import Modal from './Modal';
+import Button from './Button';
 
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
