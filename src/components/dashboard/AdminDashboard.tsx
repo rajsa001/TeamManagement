@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Modal from '../ui/Modal';
-import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare, Trash2 } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useDailyTasks } from '../../hooks/useDailyTasks';
@@ -1127,6 +1127,14 @@ const handleDeleteHoliday = async (holidayId: string) => {
               currentView={taskView}
               onViewChange={setTaskView}
             />
+            <Button
+              variant="outline"
+              onClick={() => onTabChange('deleted-tasks')}
+              className="border-red-300 text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              See Deleted Tasks
+            </Button>
             <Button
               icon={Plus}
               onClick={() => setIsTaskFormOpen(true)}
@@ -2961,7 +2969,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
   }
 
   if (activeTab === 'deleted-tasks') {
-    return <DeletedTasksPage />;
+    return <DeletedTasksPage onBack={() => onTabChange('tasks')} />;
   }
 
   return null;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calendar, User, Tag, Eye, AlertTriangle } from 'lucide-react';
+import { Trash2, Calendar, User, Tag, Eye, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { DeletedTask } from '../../types';
 import { deletedTasksService } from '../../services/deletedTasks';
 import Card from '../ui/Card';
@@ -7,7 +7,11 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 
-const DeletedTasksPage: React.FC = () => {
+interface DeletedTasksPageProps {
+  onBack?: () => void;
+}
+
+const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
   const [deletedTasks, setDeletedTasks] = useState<DeletedTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,12 +91,25 @@ const DeletedTasksPage: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <Trash2 className="w-6 h-6 mr-3 text-red-600" />
-            Deleted Tasks
-          </h1>
-          <p className="text-gray-600 mt-1">View and audit deleted tasks</p>
+        <div className="flex items-center space-x-4">
+          {onBack && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onBack}
+              className="flex items-center"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Tasks
+            </Button>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+              <Trash2 className="w-6 h-6 mr-3 text-red-600" />
+              Deleted Tasks
+            </h1>
+            <p className="text-gray-600 mt-1">View and audit deleted tasks</p>
+          </div>
         </div>
       </div>
 
@@ -171,7 +188,12 @@ const DeletedTasksPage: React.FC = () => {
       {/* Deleted Tasks List */}
       <Card>
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Recently Deleted Tasks</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">All Deleted Tasks</h2>
+            <div className="text-sm text-gray-500">
+              Total: {deletedTasks.length} deleted tasks
+            </div>
+          </div>
           
           {deletedTasks.length === 0 ? (
             <div className="text-center py-12">
@@ -180,60 +202,98 @@ const DeletedTasksPage: React.FC = () => {
               <p className="text-gray-500">No tasks have been deleted yet.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {deletedTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">{task.task_name}</h3>
-                        <Badge variant="secondary" className={getTaskTypeColor(task.task_type)}>
-                          {task.task_type === 'daily' ? 'Daily Task' : 'Regular Task'}
-                        </Badge>
-                        {task.priority && (
-                          <Badge variant="outline" className="text-xs">
-                            {task.priority}
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      {task.description && (
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">{task.description}</p>
-                      )}
-                      
-                      <div className="flex items-center space-x-4 text-xs text-gray-500">
-                        <div className="flex items-center">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          Deleted: {formatDate(task.deleted_at)}
-                        </div>
-                        <div className="flex items-center">
-                          <User className="w-3 h-3 mr-1" />
-                          Deleted by: {task.deleted_by}
-                        </div>
-                        {task.due_date && (
-                          <div className="flex items-center">
-                            <Tag className="w-3 h-3 mr-1" />
-                            Due: {new Date(task.due_date).toLocaleDateString()}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Task Details
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type & Priority
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Assignment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Deletion Info
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {deletedTasks.map((task) => (
+                    <tr key={task.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium text-gray-900 mb-1">
+                            {task.task_name}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedTask(task)}
-                      className="ml-4"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      View Details
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                          {task.description && (
+                            <div className="text-sm text-gray-500 line-clamp-2 max-w-xs">
+                              {task.description}
+                            </div>
+                          )}
+                          {task.due_date && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              {task.task_type === 'daily' ? 'Task Date' : 'Due Date'}: {new Date(task.due_date).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col space-y-1">
+                          <Badge variant="secondary" className={getTaskTypeColor(task.task_type)}>
+                            {task.task_type === 'daily' ? 'Daily Task' : 'Regular Task'}
+                          </Badge>
+                          {task.priority && (
+                            <Badge variant="outline" className="text-xs">
+                              {task.priority}
+                            </Badge>
+                          )}
+                          {task.status && (
+                            <Badge variant="outline" className="text-xs">
+                              {task.status}
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          <div className="font-medium">Assigned To:</div>
+                          <div className="text-gray-500">{task.user_id}</div>
+                        </div>
+                        <div className="text-sm text-gray-900 mt-1">
+                          <div className="font-medium">Created By:</div>
+                          <div className="text-gray-500">{task.created_by}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          <div className="font-medium">Deleted By:</div>
+                          <div className="text-gray-500">{task.deleted_by}</div>
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {formatDate(task.deleted_at)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedTask(task)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View Details
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
