@@ -13,13 +13,6 @@ export const TaskQuickStats: React.FC<TaskQuickStatsProps> = ({ tasks }) => {
   const pendingTasks = tasks.filter(task => task.status === 'pending').length;
   const inProgressTasks = tasks.filter(task => task.status === 'in_progress').length;
   const notStartedTasks = tasks.filter(task => task.status === 'not_started').length;
-  const overdueTasks = tasks.filter(task => {
-    if (task.status === 'completed') return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(task.due_date);
-    return due < today;
-  }).length;
 
   const stats = [
     {
@@ -29,22 +22,6 @@ export const TaskQuickStats: React.FC<TaskQuickStatsProps> = ({ tasks }) => {
       color: 'bg-blue-500',
       textColor: 'text-blue-600',
       bgColor: 'bg-blue-50'
-    },
-    {
-      label: 'Completed',
-      value: completedTasks,
-      icon: CheckCircle2,
-      color: 'bg-green-500',
-      textColor: 'text-green-600',
-      bgColor: 'bg-green-50'
-    },
-    {
-      label: 'Pending',
-      value: pendingTasks,
-      icon: Clock,
-      color: 'bg-purple-500',
-      textColor: 'text-purple-600',
-      bgColor: 'bg-purple-50'
     },
     {
       label: 'In Progress',
@@ -63,12 +40,20 @@ export const TaskQuickStats: React.FC<TaskQuickStatsProps> = ({ tasks }) => {
       bgColor: 'bg-gray-50'
     },
     {
-      label: 'Overdue',
-      value: overdueTasks,
-      icon: AlertCircle,
-      color: 'bg-red-500',
-      textColor: 'text-red-600',
-      bgColor: 'bg-red-50'
+      label: 'Pending',
+      value: pendingTasks,
+      icon: Clock,
+      color: 'bg-purple-500',
+      textColor: 'text-purple-600',
+      bgColor: 'bg-purple-50'
+    },
+    {
+      label: 'Completed',
+      value: completedTasks,
+      icon: CheckCircle2,
+      color: 'bg-green-500',
+      textColor: 'text-green-600',
+      bgColor: 'bg-green-50'
     }
   ];
 
@@ -84,7 +69,7 @@ export const TaskQuickStats: React.FC<TaskQuickStatsProps> = ({ tasks }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (

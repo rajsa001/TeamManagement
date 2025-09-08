@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Modal from '../ui/Modal';
-import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare, Trash2 } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare, Trash2, Play, Pause } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useDailyTasks } from '../../hooks/useDailyTasks';
@@ -35,14 +35,16 @@ import TaskListView from './TaskListView';
 import TaskCalendarView from './TaskCalendarView';
 import { MemberTaskStats } from './MemberTaskStats';
 import { MemberDailyTaskStats } from './MemberDailyTaskStats';
+import { DailyTaskQuickStats } from './DailyTaskQuickStats';
 import { TaskQuickStats } from './TaskQuickStats';
 import { WebhookSettings } from './WebhookSettings';
 
 interface AdminDashboardProps {
   activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab }) => {
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab, onTabChange }) => {
   // All hooks at the top
   const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask, filterTasks, refetchTasks } = useTasks();
   const { leaves, loading: leavesLoading, addLeave, deleteLeave, updateLeave, setLeaves } = useLeaves();
@@ -958,6 +960,12 @@ const handleDeleteHoliday = async (holidayId: string) => {
       return (task.status !== 'completed' && due < today) || task.status === 'blocked';
     });
 
+    // Not Started: tasks with status 'not_started'
+    const notStartedTasks = tasks.filter(task => task.status === 'not_started');
+
+    // In Progress: tasks with status 'in_progress'
+    const inProgressTasks = tasks.filter(task => task.status === 'in_progress');
+
     // Calculate on leave and working today with names
     const todayStr = today.toISOString().split('T')[0];
     const onLeaveToday = members.filter(member =>
@@ -999,6 +1007,11 @@ const handleDeleteHoliday = async (holidayId: string) => {
         <div className="pt-4 pb-2">
         </div>
         <DashboardStats tasks={tasks} leaves={leaves} />
+        
+        {/* Daily Tasks Overview */}
+        <h2 className="text-xl font-semibold text-gray-800 mt-8 mb-2">Daily Tasks Overview</h2>
+        <DailyTaskQuickStats dailyTasks={dailyTasks} />
+        
         {/* Section title for leaves dashboard */}
         <h2 className="text-xl font-semibold text-gray-800 mt-8 mb-2">Team Attendance Today</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto mb-8">

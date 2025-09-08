@@ -746,7 +746,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-700">Progress</p>
-                    <p className="text-sm text-gray-900">{task.progress}%</p>
+                    {!isOverdue && (
+                      <p className="text-sm text-gray-900">{task.progress}%</p>
+                    )}
                   </div>
                 </div>
               </div>

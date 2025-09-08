@@ -120,7 +120,7 @@ const AppContent: React.FC = () => {
               activeTab === 'profile' ? <AdminProfile />
               : activeTab === 'reports' ? <Reports />
               : activeTab === 'notifications' ? <NotificationsPage setFilteredNotificationsCount={setFilteredNotificationsCount} />
-              : <AdminDashboard activeTab={activeTab} />
+              : <AdminDashboard activeTab={activeTab} onTabChange={setActiveTab} />
             ) : user.role === 'project_manager' ? (
               activeTab === 'profile' ? <ProjectManagerProfile />
               : activeTab === 'notifications' ? <NotificationsPage setFilteredNotificationsCount={setFilteredNotificationsCount} />

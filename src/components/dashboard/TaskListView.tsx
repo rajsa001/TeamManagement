@@ -206,9 +206,11 @@ const TaskListView: React.FC<TaskListViewProps> = ({
                           style={{ width: `${task.progress}%` }}
                         ></div>
                       </div>
-                      <span className="text-sm text-gray-600 w-8">
-                        {task.progress}%
-                      </span>
+                      {!isOverdue(task.due_date, task.status) && (
+                        <span className="text-sm text-gray-600 w-8">
+                          {task.progress}%
+                        </span>
+                      )}
                     </div>
                   </td>
                   

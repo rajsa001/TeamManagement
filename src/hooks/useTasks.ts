@@ -10,6 +10,68 @@ export const useTasks = () => {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
+  const fetchUserDataForTasks = async (tasks: any[]): Promise<Task[]> => {
+    if (!tasks.length) return [];
+    
+    try {
+      // Get unique user IDs from tasks
+      const userIds = [...new Set(tasks.map(task => task.user_id))];
+      
+      // Fetch members, admins, and project managers
+      const [membersData, adminsData, projectManagersData] = await Promise.all([
+        supabase
+          .from('members')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds)
+          .eq('is_active', true),
+        supabase
+          .from('admins')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds)
+          .eq('is_active', true),
+        supabase
+          .from('project_managers')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds)
+          .eq('is_active', true)
+      ]);
+
+      // Combine members, admins, and project managers into a single map
+      const userMap = new Map();
+      
+      if (membersData.data) {
+        membersData.data.forEach(member => {
+          userMap.set(member.id, { ...member, role: 'member' });
+        });
+      }
+      
+      if (adminsData.data) {
+        adminsData.data.forEach(admin => {
+          userMap.set(admin.id, { ...admin, role: 'admin' });
+        });
+      }
+      
+      if (projectManagersData.data) {
+        projectManagersData.data.forEach(pm => {
+          userMap.set(pm.id, { ...pm, role: 'project_manager' });
+        });
+      }
+
+      // Attach user data to tasks
+      return tasks.map(task => ({
+        ...task,
+        user: userMap.get(task.user_id) || null
+      }));
+    } catch (error) {
+      console.error('Error fetching user data for tasks:', error);
+      // Return tasks without user data if there's an error
+      return tasks.map(task => ({
+        ...task,
+        user: null
+      }));
+    }
+  };
+
   const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
@@ -19,7 +81,10 @@ export const useTasks = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTasks(data || []);
+      
+      // Fetch user data for all tasks
+      const tasksWithUsers = await fetchUserDataForTasks(data || []);
+      setTasks(tasksWithUsers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -36,8 +101,13 @@ export const useTasks = () => {
         .single();
 
       if (error) throw error;
-      setTasks(prev => [data, ...prev]);
-      return data;
+      
+      // Fetch user data for the new task
+      const tasksWithUsers = await fetchUserDataForTasks([data]);
+      const taskWithUser = tasksWithUsers[0];
+      
+      setTasks(prev => [taskWithUser, ...prev]);
+      return taskWithUser;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       throw err;
@@ -56,8 +126,13 @@ export const useTasks = () => {
 
       if (error) throw error;
       console.log('useTasks: Task updated successfully:', data);
-      setTasks(prev => prev.map(task => task.id === id ? data : task));
-      return data;
+      
+      // Fetch user data for the updated task
+      const tasksWithUsers = await fetchUserDataForTasks([data]);
+      const taskWithUser = tasksWithUsers[0];
+      
+      setTasks(prev => prev.map(task => task.id === id ? taskWithUser : task));
+      return taskWithUser;
     } catch (err) {
       console.error('useTasks: Error updating task:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Trash2, Calendar, User, Tag, Eye, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { DeletedTask } from '../../types';
 import { deletedTasksService } from '../../services/deletedTasks';
+import { supabase } from '../../lib/supabase';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -16,6 +17,7 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<DeletedTask | null>(null);
+  const [userNames, setUserNames] = useState<{[key: string]: string}>({});
   const [stats, setStats] = useState({
     totalDeleted: 0,
     deletedToday: 0,
@@ -29,11 +31,70 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
     fetchStats();
   }, []);
 
+  const fetchUserNames = async (userIds: string[]) => {
+    if (userIds.length === 0) return {};
+    
+    try {
+      const [membersData, adminsData, projectManagersData] = await Promise.all([
+        supabase
+          .from('members')
+          .select('id, name')
+          .in('id', userIds)
+          .eq('is_active', true),
+        supabase
+          .from('admins')
+          .select('id, name')
+          .in('id', userIds)
+          .eq('is_active', true),
+        supabase
+          .from('project_managers')
+          .select('id, name')
+          .in('id', userIds)
+          .eq('is_active', true)
+      ]);
+
+      const nameMap: {[key: string]: string} = {};
+      
+      if (membersData.data) {
+        membersData.data.forEach(member => {
+          nameMap[member.id] = member.name;
+        });
+      }
+      
+      if (adminsData.data) {
+        adminsData.data.forEach(admin => {
+          nameMap[admin.id] = admin.name;
+        });
+      }
+      
+      if (projectManagersData.data) {
+        projectManagersData.data.forEach(pm => {
+          nameMap[pm.id] = pm.name;
+        });
+      }
+
+      return nameMap;
+    } catch (error) {
+      console.error('Error fetching user names:', error);
+      return {};
+    }
+  };
+
   const fetchDeletedTasks = async () => {
     try {
       setLoading(true);
       const tasks = await deletedTasksService.getDeletedTasks({ limit: 100 });
       setDeletedTasks(tasks);
+      
+      // Fetch user names for all unique user IDs
+      const userIds = [...new Set([
+        ...tasks.map(task => task.user_id),
+        ...tasks.map(task => task.created_by),
+        ...tasks.map(task => task.deleted_by)
+      ])];
+      
+      const names = await fetchUserNames(userIds);
+      setUserNames(names);
     } catch (err) {
       setError('Failed to fetch deleted tasks');
       console.error('Error fetching deleted tasks:', err);
@@ -263,17 +324,17 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           <div className="font-medium">Assigned To:</div>
-                          <div className="text-gray-500">{task.user_id}</div>
+                          <div className="text-gray-500">{userNames[task.user_id] || task.user_id}</div>
                         </div>
                         <div className="text-sm text-gray-900 mt-1">
                           <div className="font-medium">Created By:</div>
-                          <div className="text-gray-500">{task.created_by}</div>
+                          <div className="text-gray-500">{userNames[task.created_by] || task.created_by}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           <div className="font-medium">Deleted By:</div>
-                          <div className="text-gray-500">{task.deleted_by}</div>
+                          <div className="text-gray-500">{userNames[task.deleted_by] || task.deleted_by}</div>
                         </div>
                         <div className="text-sm text-gray-500 mt-1">
                           {formatDate(task.deleted_at)}
@@ -338,19 +399,19 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-600">Assigned To</label>
-                <p className="text-sm text-gray-900">{selectedTask.user_id}</p>
+                <p className="text-sm text-gray-900">{userNames[selectedTask.user_id] || selectedTask.user_id}</p>
               </div>
               
               <div>
                 <label className="text-sm font-medium text-gray-600">Created By</label>
-                <p className="text-sm text-gray-900">{selectedTask.created_by}</p>
+                <p className="text-sm text-gray-900">{userNames[selectedTask.created_by] || selectedTask.created_by}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-600">Deleted By</label>
-                <p className="text-sm text-gray-900">{selectedTask.deleted_by}</p>
+                <p className="text-sm text-gray-900">{userNames[selectedTask.deleted_by] || selectedTask.deleted_by}</p>
               </div>
               
               <div>

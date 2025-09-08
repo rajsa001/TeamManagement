@@ -14,10 +14,8 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ tasks, leaves }) => {
   today.setHours(0, 0, 0, 0);
 
   const completedTasks = tasks.filter(task => task.status === 'completed').length;
-  const pendingTasks = tasks.filter(task => {
-    const due = new Date(task.due_date);
-    return (task.status === 'not_started' || task.status === 'in_progress' || task.status === 'pending') && due >= today;
-  }).length;
+  const notStartedTasks = tasks.filter(task => task.status === 'not_started').length;
+  const inProgressTasks = tasks.filter(task => task.status === 'in_progress').length;
   // Blocked: not completed and due before today, or status 'blocked'
   const blockedTasks = tasks.filter(task => {
     const due = new Date(task.due_date);
@@ -34,9 +32,16 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ tasks, leaves }) => {
       bgColor: 'bg-green-100'
     },
     {
-      label: 'Pending Tasks',
-      value: pendingTasks,
+      label: 'Not Started',
+      value: notStartedTasks,
       icon: Clock,
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-100'
+    },
+    {
+      label: 'In Progress',
+      value: inProgressTasks,
+      icon: AlertTriangle,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100'
     },
@@ -57,7 +62,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ tasks, leaves }) => {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

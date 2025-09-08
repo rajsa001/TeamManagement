@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, User, Bell, CheckCircle2, Calendar, Clock, AlertCircle, CheckSquare } from 'lucide-react';
+import { Plus, User, Bell, CheckCircle2, Calendar, Clock, AlertCircle, CheckSquare, Play, Pause } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useAuth } from '../../contexts/AuthContext';
@@ -523,6 +523,12 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
       const due = new Date(task.due_date);
       return (task.status !== 'completed' && due < today) || task.status === 'blocked';
     });
+
+    // Not Started: tasks with status 'not_started'
+    const notStartedTasks = tasks.filter(task => task.status === 'not_started');
+
+    // In Progress: tasks with status 'in_progress'
+    const inProgressTasks = tasks.filter(task => task.status === 'in_progress');
     // Icons
     return (
       <div className="space-y-8 px-2 md:px-8 lg:px-16 pb-8">

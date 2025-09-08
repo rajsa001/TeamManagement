@@ -58,7 +58,7 @@ export const MemberTaskStats: React.FC<MemberTaskStatsProps> = ({
           role: user.role,
           assigned: userTasks.length,
           completed: userTasks.filter(task => task.status === 'completed').length,
-          pending: userTasks.filter(task => task.status === 'pending').length,
+          pending: userTasks.filter(task => task.status !== 'completed').length,
           inProgress: userTasks.filter(task => task.status === 'in_progress').length,
           total: userTasks.length
         };

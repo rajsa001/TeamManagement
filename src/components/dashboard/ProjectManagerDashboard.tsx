@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Modal from '../ui/Modal';
-import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare } from 'lucide-react';
+import { Plus, Users, BarChart3, UserPlus, ChevronDown, CheckCircle2, Calendar, Clock, AlertCircle, Calendar as CalendarIcon, Pencil, CalendarDays, List, Search, CheckSquare, Play, Pause } from 'lucide-react';
 import { useTasks } from '../../hooks/useTasks';
 import { useLeaves } from '../../hooks/useLeaves';
 import { useDailyTasks } from '../../hooks/useDailyTasks';
@@ -627,6 +627,12 @@ const ProjectManagerDashboard: React.FC<ProjectManagerDashboardProps> = ({ activ
       const due = new Date(task.due_date);
       return (task.status !== 'completed' && due < today) || task.status === 'blocked';
     });
+
+    // Not Started: tasks with status 'not_started'
+    const notStartedTasks = filteredTasks.filter(task => task.status === 'not_started');
+
+    // In Progress: tasks with status 'in_progress'
+    const inProgressTasks = filteredTasks.filter(task => task.status === 'in_progress');
 
     // Calculate on leave and working today with names
     const todayStr = today.toISOString().split('T')[0];
