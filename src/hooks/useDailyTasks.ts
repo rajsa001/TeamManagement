@@ -3,6 +3,7 @@ import { DailyTask, DailyTaskFilters, Member, Admin } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { authService } from '../services/auth';
+import { deletedTasksService } from '../services/deletedTasks';
 import { toast } from 'react-toastify';
 
 export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
@@ -467,6 +468,9 @@ export const useDailyTasks = (filters: DailyTaskFilters = {}) => {
     }
 
     try {
+      // Record the deletion in deleted_tasks table
+      await deletedTasksService.recordDeletedTask(taskToDelete, user.id, 'daily');
+
       const { error } = await supabase
         .from('daily_tasks')
         .delete()

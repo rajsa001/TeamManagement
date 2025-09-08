@@ -150,3 +150,29 @@ export interface DailyTaskFilters {
   search?: string;
   project?: string;
 }
+
+export interface DeletedTask {
+  id: string;
+  original_task_id: string;
+  task_name: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  due_date?: string;
+  progress?: number;
+  user_id: string;
+  created_by: string;
+  deleted_by: string;
+  project_id?: string;
+  estimated_hours?: number;
+  actual_hours?: number;
+  tags?: string[];
+  attachments?: any[];
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string;
+  task_type: 'regular' | 'daily';
+  task_date?: string;
+  is_active?: boolean;
+}

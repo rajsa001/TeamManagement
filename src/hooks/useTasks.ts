@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Task, TaskFilters } from '../types';
+import { deletedTasksService } from '../services/deletedTasks';
+import { useAuth } from '../contexts/AuthContext';
 
 export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -63,7 +66,23 @@ export const useTasks = () => {
   };
 
   const deleteTask = async (id: string) => {
+    if (!user) {
+      setError('No user found. Cannot delete task.');
+      throw new Error('No user found');
+    }
+
     try {
+      // First, get the task data before deleting
+      const taskToDelete = tasks.find(task => task.id === id);
+      if (!taskToDelete) {
+        setError('Task not found');
+        throw new Error('Task not found');
+      }
+
+      // Record the deletion in deleted_tasks table
+      await deletedTasksService.recordDeletedTask(taskToDelete, user.id, 'regular');
+
+      // Then delete the task
       const { error } = await supabase
         .from('tasks')
         .delete()

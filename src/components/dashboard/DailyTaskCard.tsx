@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { DailyTask } from '../../types';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
-import { Eye, Calendar, User, AlertCircle, CheckCircle2, File, Link } from 'lucide-react';
+import { DeleteConfirmationModal } from '../ui/DeleteConfirmationModal';
+import { Eye, Calendar, User, AlertCircle, CheckCircle2, File, Link, Trash2 } from 'lucide-react';
 
 interface DailyTaskCardProps {
   task: DailyTask;
@@ -49,6 +51,14 @@ export const DailyTaskCard: React.FC<DailyTaskCardProps> = ({
   isAdmin = false
 }) => {
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const { 
+    isOpen: isDeleteModalOpen, 
+    task: taskToDelete, 
+    taskType, 
+    showDeleteConfirmation, 
+    hideDeleteConfirmation, 
+    confirmDelete 
+  } = useDeleteConfirmation();
 
   const handleStatusChange = (newStatus: 'pending' | 'completed' | 'skipped') => {
     onStatusChange(task.id, newStatus);
@@ -264,7 +274,7 @@ export const DailyTaskCard: React.FC<DailyTaskCardProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onDelete(task.id)}
+                  onClick={() => showDeleteConfirmation(task, 'daily', () => onDelete && onDelete(task.id))}
                   className="border-red-300 text-red-600 hover:bg-red-50"
                 >
                   Delete
@@ -465,6 +475,20 @@ export const DailyTaskCard: React.FC<DailyTaskCardProps> = ({
           </div>
         </Modal>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={hideDeleteConfirmation}
+        onConfirm={confirmDelete}
+        taskName={taskToDelete?.task_name || ''}
+        taskDescription={taskToDelete?.description}
+        assignedTo={taskToDelete?.user?.name}
+        projectName={taskToDelete?.project?.name}
+        priority={taskToDelete?.priority}
+        dueDate={taskToDelete?.task_date}
+        taskType={taskType}
+      />
     </>
   );
 };

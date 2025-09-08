@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Task } from '../../types';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 import { Calendar, User, CheckCircle2, AlertCircle, Clock, Eye, Edit, Trash2 } from 'lucide-react';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Modal from '../ui/Modal';
+import { DeleteConfirmationModal } from '../ui/DeleteConfirmationModal';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -34,6 +36,14 @@ const TaskListView: React.FC<TaskListViewProps> = ({
   projects = []
 }) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const { 
+    isOpen: isDeleteModalOpen, 
+    task: taskToDelete, 
+    taskType, 
+    showDeleteConfirmation, 
+    hideDeleteConfirmation, 
+    confirmDelete 
+  } = useDeleteConfirmation();
 
   const getStatusVariant = (status: Task['status']) => {
     switch (status) {
@@ -227,7 +237,7 @@ const TaskListView: React.FC<TaskListViewProps> = ({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onDelete(task.id)}
+                        onClick={() => showDeleteConfirmation(task, 'regular', () => onDelete(task.id))}
                         className="text-gray-400 hover:text-red-600"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -338,6 +348,20 @@ const TaskListView: React.FC<TaskListViewProps> = ({
           </div>
         </Modal>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={hideDeleteConfirmation}
+        onConfirm={confirmDelete}
+        taskName={taskToDelete?.task_name || ''}
+        taskDescription={taskToDelete?.description}
+        assignedTo={taskToDelete?.user?.name}
+        projectName={taskToDelete?.project?.name}
+        priority={taskToDelete?.priority}
+        dueDate={taskToDelete?.due_date}
+        taskType={taskType}
+      />
     </>
   );
 };

@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import LeaveForm from './LeaveForm';
 import HolidayCalendar from './HolidayCalendar';
 import { DailyTasksPage } from './DailyTasksPage';
+import DeletedTasksPage from './DeletedTasksPage';
 import TaskViewSelector, { TaskViewType } from './TaskViewSelector';
 import TaskListView from './TaskListView';
 import TaskCalendarView from './TaskCalendarView';
@@ -2957,6 +2958,10 @@ const handleDeleteHoliday = async (holidayId: string) => {
 
   if (activeTab === 'daily-tasks') {
     return <DailyTasksPage />;
+  }
+
+  if (activeTab === 'deleted-tasks') {
+    return <DeletedTasksPage />;
   }
 
   return null;

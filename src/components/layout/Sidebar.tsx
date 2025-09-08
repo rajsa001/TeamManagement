@@ -13,7 +13,8 @@ import {
   ClipboardList,
   Target,
   Settings,
-  Shield
+  Shield,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavLink } from 'react-router-dom'; // Added for NavLink
@@ -50,6 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isOpen, setIs
     { id: 'tasks', label: 'All Tasks', icon: ClipboardList },
     { id: 'my-tasks', label: 'My Tasks', icon: Target },
     { id: 'daily-tasks', label: 'Daily Tasks', icon: CheckSquare },
+    { id: 'deleted-tasks', label: 'Deleted Tasks', icon: Trash2 },
     { id: 'leaves', label: 'All Leaves', icon: CalendarDays },
     { id: 'holidays', label: 'Company Holidays', icon: CalendarRange },
     { id: 'team', label: 'Team', icon: Users },

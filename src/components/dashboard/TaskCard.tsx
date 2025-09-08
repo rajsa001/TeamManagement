@@ -3,10 +3,12 @@ import { Calendar, User, Trash2, CheckCircle2, AlertCircle, Pencil, Eye, Papercl
 import { fileUploadService } from '../../services/fileUpload';
 import { Task, TaskAttachment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import { DeleteConfirmationModal } from '../ui/DeleteConfirmationModal';
 
 interface TaskCardProps {
   task: Task;
@@ -34,6 +36,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
   projects = []
 }) => {
   const { user } = useAuth();
+  const { 
+    isOpen: isDeleteModalOpen, 
+    task: taskToDelete, 
+    taskType, 
+    showDeleteConfirmation, 
+    hideDeleteConfirmation, 
+    confirmDelete 
+  } = useDeleteConfirmation();
   // Helper to check if a date is before today
   const isBeforeToday = (date: Date) => {
     const today = new Date();
@@ -301,7 +311,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 variant="ghost"
                 size="sm"
                 icon={Trash2}
-                onClick={() => onDelete(task.id)}
+                onClick={() => showDeleteConfirmation(task, 'regular', () => onDelete(task.id))}
                 className="text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full"
                 title="Delete task"
             />
@@ -828,6 +838,20 @@ const TaskCard: React.FC<TaskCardProps> = ({
           </div>
         </Modal>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={hideDeleteConfirmation}
+        onConfirm={confirmDelete}
+        taskName={taskToDelete?.task_name || ''}
+        taskDescription={taskToDelete?.description}
+        assignedTo={taskToDelete?.user?.name}
+        projectName={taskToDelete?.project?.name}
+        priority={taskToDelete?.priority}
+        dueDate={taskToDelete?.due_date}
+        taskType={taskType}
+      />
      </>
   );
 };
