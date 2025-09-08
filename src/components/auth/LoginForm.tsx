@@ -53,7 +53,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ role, onBack }) => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={role === 'admin' ? 'contact.tasknova@gmail.com' : role === 'project_manager' ? 'pm@company.com' : 'member@company.com'}
+              placeholder="Enter your email address"
               className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             />
