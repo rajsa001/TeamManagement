@@ -497,29 +497,32 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
 
   if (activeTab === 'dashboard') {
     // Section logic for member dashboard (like admin)
+    // First, filter tasks to only show tasks assigned to the current member
+    const memberTasks = tasks.filter(task => task.user_id === user?.id);
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const isSameDay = (d1, d2) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
     // Recently Completed: completed within last 3 days
-    const recentlyCompletedTasks = tasks.filter(task => {
+    const recentlyCompletedTasks = memberTasks.filter(task => {
       if (task.status !== 'completed' || !task.updated_at) return false;
       const updated = new Date(task.updated_at);
       const diff = (today.getTime() - updated.setHours(0,0,0,0)) / (1000 * 60 * 60 * 24);
       return diff <= 3 && diff >= 0;
     });
     // Due Today: due date is today and not completed
-    const dueTodayTasks = tasks.filter(task => {
+    const dueTodayTasks = memberTasks.filter(task => {
       const due = new Date(task.due_date);
       return isSameDay(due, today) && task.status !== 'completed';
     });
     // Upcoming: due date is within next 3 days (excluding today)
-    const upcomingTasks = tasks.filter(task => {
+    const upcomingTasks = memberTasks.filter(task => {
       const due = new Date(task.due_date);
       const diff = (due.setHours(0,0,0,0) - today.getTime()) / (1000 * 60 * 60 * 24);
       return diff > 0 && diff <= 3;
     });
     // Blocked: overdue and not completed, or status is 'blocked'
-    const blockedTasks = tasks.filter(task => {
+    const blockedTasks = memberTasks.filter(task => {
       const due = new Date(task.due_date);
       return (task.status !== 'completed' && due < today) || task.status === 'blocked';
     });
@@ -538,7 +541,7 @@ const MemberDashboard: React.FC<MemberDashboardProps> = ({ activeTab }) => {
             Dashboard
           </div>
         </div>
-        <DashboardStats tasks={tasks} leaves={leaves} />
+        <DashboardStats tasks={memberTasks} leaves={leaves} />
         {/* Task sections grid */}
         <h2 className="text-xl font-semibold text-gray-800 mt-10 mb-2">Task Overview</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

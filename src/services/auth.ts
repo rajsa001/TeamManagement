@@ -231,7 +231,7 @@ export const authService = {
         return false;
       }
       
-      // Trim the password input
+      // Trim the password input (passwords are stored with trim)
       const trimmedPassword = password.trim();
       
       console.log('[DEBUG] verifyAdminPassword called with:', { 
@@ -242,15 +242,17 @@ export const authService = {
       
       const { data: admin, error } = await supabase
         .from('admins')
-        .select('password_hash, email')
+        .select('password_hash, email, id')
         .eq('id', adminId)
         .single();
       
       console.log('[DEBUG] Admin query result:', { 
         found: !!admin, 
+        adminId: admin?.id,
         email: admin?.email,
         hasHash: !!admin?.password_hash,
         hashLength: admin?.password_hash?.length,
+        hashPreview: admin?.password_hash ? admin.password_hash.substring(0, 10) + '...' : 'N/A',
         error: error?.message 
       });
       
@@ -264,35 +266,74 @@ export const authService = {
         return false;
       }
       
-      // Try with trimmed password first (most common case)
-      const hashedPasswordTrimmed = btoa(trimmedPassword);
+      // Password is stored as: btoa(password.trim())
+      // We need to decode the stored hash and compare with input password (case-insensitive)
+      
+      // Normalize the stored hash (remove any whitespace)
       const storedHash = admin.password_hash.trim();
       
-      // Also try without trimming the stored hash (in case it wasn't trimmed when stored)
-      const storedHashUntrimmed = admin.password_hash;
+      // Decode the stored password hash to get the original password
+      let storedPassword: string;
+      try {
+        storedPassword = atob(storedHash);
+      } catch (e) {
+        console.error('[DEBUG] Error decoding stored password hash:', e);
+        return false;
+      }
       
-      // Try with untrimmed password (fallback)
-      const hashedPasswordUntrimmed = btoa(password);
+      // Compare passwords case-insensitively
+      const passwordMatches = storedPassword.toLowerCase() === trimmedPassword.toLowerCase();
       
-      const matchTrimmed = storedHash === hashedPasswordTrimmed;
-      const matchUntrimmed = storedHashUntrimmed === hashedPasswordUntrimmed;
-      const matchTrimmedStored = storedHash === hashedPasswordUntrimmed;
-      const matchUntrimmedStored = storedHashUntrimmed === hashedPasswordTrimmed;
+      // Also try direct hash comparison (for backwards compatibility)
+      let computedHash: string;
+      try {
+        computedHash = btoa(trimmedPassword);
+      } catch (e) {
+        console.error('[DEBUG] Error encoding password with btoa:', e);
+        // If encoding fails, fall back to decoded comparison only
+        return passwordMatches;
+      }
       
-      const finalMatch = matchTrimmed || matchUntrimmed || matchTrimmedStored || matchUntrimmedStored;
+      // Direct hash comparison (most common case)
+      const hashMatches = storedHash === computedHash;
       
-      console.log('[DEBUG] Password comparison:', { 
-        storedHashLength: storedHash.length, 
-        computedHashTrimmedLength: hashedPasswordTrimmed.length,
-        computedHashUntrimmedLength: hashedPasswordUntrimmed.length,
-        matchTrimmed,
-        matchUntrimmed,
-        matchTrimmedStored,
-        matchUntrimmedStored,
-        finalMatch
-      });
+      // Also try without trimming stored hash
+      const hashMatchesUntrimmed = admin.password_hash === computedHash;
       
-      return finalMatch;
+      // Try with untrimmed password
+      let computedHashUntrimmed: string;
+      try {
+        computedHashUntrimmed = btoa(password);
+        const hashMatchesUntrimmedPassword = storedHash === computedHashUntrimmed || admin.password_hash === computedHashUntrimmed;
+        
+        const finalMatch = passwordMatches || hashMatches || hashMatchesUntrimmed || hashMatchesUntrimmedPassword;
+        
+        console.log('[DEBUG] Password comparison:', { 
+          storedPassword: storedPassword,
+          inputPassword: trimmedPassword,
+          passwordMatches,
+          storedHashLength: storedHash.length, 
+          computedHashLength: computedHash.length,
+          hashMatches,
+          hashMatchesUntrimmed,
+          hashMatchesUntrimmedPassword,
+          finalMatch
+        });
+        
+        if (!finalMatch) {
+          console.log('[DEBUG] Password mismatch details:');
+          console.log('[DEBUG] - Stored password (decoded):', storedPassword);
+          console.log('[DEBUG] - Input password:', trimmedPassword);
+          console.log('[DEBUG] - Stored hash (full):', storedHash);
+          console.log('[DEBUG] - Computed hash (trimmed):', computedHash);
+        }
+        
+        return finalMatch;
+      } catch (e) {
+        console.error('[DEBUG] Error encoding untrimmed password with btoa:', e);
+        // Fall back to case-insensitive comparison
+        return passwordMatches || hashMatches || hashMatchesUntrimmed;
+      }
     } catch (err) {
       console.error('[DEBUG] verifyAdminPassword error:', err);
       return false;

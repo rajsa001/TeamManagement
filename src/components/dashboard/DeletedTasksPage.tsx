@@ -3,16 +3,21 @@ import { Trash2, Calendar, User, Tag, Eye, AlertTriangle, ArrowLeft } from 'luci
 import { DeletedTask } from '../../types';
 import { deletedTasksService } from '../../services/deletedTasks';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { authService } from '../../services/auth';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import PasswordInput from '../ui/PasswordInput';
+import { toast } from 'sonner';
 
 interface DeletedTasksPageProps {
   onBack?: () => void;
 }
 
 const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
+  const { user } = useAuth();
   const [deletedTasks, setDeletedTasks] = useState<DeletedTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +30,10 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
     deletedThisMonth: 0,
     byType: { regular: 0, daily: 0 }
   });
+  const [showDeleteAllWarning, setShowDeleteAllWarning] = useState(false);
+  const [showDeleteAllPassword, setShowDeleteAllPassword] = useState(false);
+  const [deleteAllPassword, setDeleteAllPassword] = useState('');
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
 
   useEffect(() => {
     fetchDeletedTasks();
@@ -112,6 +121,84 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
     }
   };
 
+  const handleDeleteAllClick = () => {
+    if (deletedTasks.length === 0) {
+      toast.error('No deleted tasks to delete');
+      return;
+    }
+    setShowDeleteAllWarning(true);
+  };
+
+  const handleWarningConfirm = () => {
+    setShowDeleteAllWarning(false);
+    setShowDeleteAllPassword(true);
+  };
+
+  const handleDeleteAll = async () => {
+    if (!user || !user.id) {
+      toast.error('User session not found. Please log in again.');
+      return;
+    }
+
+    // Verify user is an admin
+    if (user.role !== 'admin') {
+      toast.error('Only admins can delete all deleted tasks.');
+      return;
+    }
+
+    if (!deleteAllPassword) {
+      toast.error('Please enter your password');
+      return;
+    }
+
+    setDeleteAllLoading(true);
+    try {
+      console.log('[DEBUG] Delete All - Verifying password for admin:', {
+        adminId: user.id,
+        email: user.email,
+        role: user.role
+      });
+
+      // Verify admin password
+      const isValid = await authService.verifyAdminPassword(user.id, deleteAllPassword);
+      
+      console.log('[DEBUG] Delete All - Password verification result:', isValid);
+      
+      if (!isValid) {
+        toast.error('Incorrect password. Please check and try again.');
+        setDeleteAllLoading(false);
+        return;
+      }
+
+      // Delete all deleted tasks
+      const taskIds = deletedTasks.map(task => task.id);
+      console.log('[DEBUG] Delete All - Deleting tasks:', { count: taskIds.length });
+      
+      const { error } = await supabase
+        .from('deleted_tasks')
+        .delete()
+        .in('id', taskIds);
+
+      if (error) {
+        console.error('[DEBUG] Delete All - Database error:', error);
+        throw error;
+      }
+
+      toast.success(`Successfully deleted all ${deletedTasks.length} deleted tasks`);
+      
+      // Reset state and refresh
+      setDeleteAllPassword('');
+      setShowDeleteAllPassword(false);
+      setDeletedTasks([]);
+      await fetchStats();
+    } catch (err) {
+      console.error('[DEBUG] Delete All - Error:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to delete all tasks. Please try again.');
+    } finally {
+      setDeleteAllLoading(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -172,6 +259,16 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
             <p className="text-gray-600 mt-1">View and audit deleted tasks</p>
           </div>
         </div>
+        {deletedTasks.length > 0 && (
+          <Button
+            variant="danger"
+            onClick={handleDeleteAllClick}
+            className="flex items-center"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete All
+          </Button>
+        )}
       </div>
 
       {/* Statistics Cards */}
@@ -452,6 +549,99 @@ const DeletedTasksPage: React.FC<DeletedTasksPageProps> = ({ onBack }) => {
           </div>
         </Modal>
       )}
+
+      {/* Delete All Warning Modal */}
+      <Modal
+        isOpen={showDeleteAllWarning}
+        onClose={() => setShowDeleteAllWarning(false)}
+        title="Delete All Deleted Tasks"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Warning</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                You are about to permanently delete all {deletedTasks.length} deleted tasks.
+              </p>
+            </div>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-800 font-medium mb-2">This action cannot be undone!</p>
+            <p className="text-sm text-red-700">
+              All deleted task records will be permanently removed from the database. 
+              This will clear the entire audit trail of deleted tasks.
+            </p>
+          </div>
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteAllWarning(false)}
+              disabled={deleteAllLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleWarningConfirm}
+              disabled={deleteAllLoading}
+            >
+              Continue
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete All Password Modal */}
+      <Modal
+        isOpen={showDeleteAllPassword}
+        onClose={() => {
+          setShowDeleteAllPassword(false);
+          setDeleteAllPassword('');
+        }}
+        title="Confirm Password"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-6 h-6 text-orange-500" />
+            <p className="text-sm text-gray-600">
+              Please enter your password to confirm deletion of all deleted tasks.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Your Password
+            </label>
+            <PasswordInput
+              value={deleteAllPassword}
+              onChange={(e) => setDeleteAllPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteAllPassword(false);
+                setDeleteAllPassword('');
+              }}
+              disabled={deleteAllLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDeleteAll}
+              loading={deleteAllLoading}
+              disabled={!deleteAllPassword || deleteAllLoading}
+            >
+              Delete All
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
