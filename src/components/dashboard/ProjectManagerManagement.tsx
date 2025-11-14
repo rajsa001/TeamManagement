@@ -35,7 +35,6 @@ const ProjectManagerForm: React.FC<{
     department: '',
     hire_date: '',
   });
-  const [adminPassword, setAdminPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -52,7 +51,6 @@ const ProjectManagerForm: React.FC<{
     } else {
       setFormData({ name: '', email: '', password: '', phone: '', department: '', hire_date: '' });
     }
-    setAdminPassword('');
   }, [initialData, isOpen]);
 
   const isEdit = !!initialData;
@@ -85,17 +83,6 @@ const ProjectManagerForm: React.FC<{
         }
         if (!formData.password || formData.password.length < 6) {
           setError('Password must be at least 6 characters');
-          setLoading(false);
-          return;
-        }
-        if (!adminPassword) {
-          setError('Please enter your password to confirm.');
-          setLoading(false);
-          return;
-        }
-        const ok = await authService.verifyAdminPassword(user.id, adminPassword);
-        if (!ok) {
-          setError('Your password is incorrect.');
           setLoading(false);
           return;
         }
@@ -224,21 +211,6 @@ const ProjectManagerForm: React.FC<{
           />
         </div>
 
-        {!isEdit && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Your Password (for confirmation) *
-            </label>
-            <input
-              type="password"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-              placeholder="Enter your admin password to confirm"
-            />
-          </div>
-        )}
 
         <div className="flex justify-end space-x-3 pt-4">
           <Button variant="outline" onClick={onClose} disabled={loading} type="button">

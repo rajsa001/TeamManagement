@@ -5,22 +5,19 @@ import { authService } from '../../services/auth';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Modal from '../ui/Modal';
-import { useAuth } from '../../contexts/AuthContext';
-
+import PasswordInput from '../ui/PasswordInput';
 const AdminForm: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   initialData?: Partial<Admin>;
 }> = ({ isOpen, onClose, onSuccess, initialData }) => {
-  const { user } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     phone: '',
   });
-  const [adminPassword, setAdminPassword] = useState(''); // NEW
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,7 +32,6 @@ const AdminForm: React.FC<{
     } else {
       setFormData({ name: '', email: '', password: '', phone: '' });
     }
-    setAdminPassword('');
   }, [initialData, isOpen]);
 
   const isEdit = !!initialData;
@@ -71,18 +67,6 @@ const AdminForm: React.FC<{
         }
         if (!formData.password || formData.password.length < 6) {
           setError('Password must be at least 6 characters');
-          setLoading(false);
-          return;
-        }
-        // Require admin password authentication
-        if (!adminPassword) {
-          setError('Please enter your password to confirm.');
-          setLoading(false);
-          return;
-        }
-        const ok = await authService.verifyAdminPassword(user.id, adminPassword);
-        if (!ok) {
-          setError('Your password is incorrect.');
           setLoading(false);
           return;
         }
@@ -152,12 +136,11 @@ const AdminForm: React.FC<{
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Password {isEdit ? '(leave blank to keep unchanged)' : '*'}
             </label>
-            <input
-              type="password"
+            <PasswordInput
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required={!isEdit}
               minLength={6}
               placeholder={isEdit ? 'Leave blank to keep current password' : ''}
@@ -176,22 +159,6 @@ const AdminForm: React.FC<{
             />
           </div>
         </div>
-        {/* Password authentication before adding admin */}
-        {!isEdit && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Your Password (required to add a new admin)
-            </label>
-            <input
-              type="password"
-              name="adminPassword"
-              value={adminPassword}
-              onChange={e => setAdminPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-        )}
         <div className="flex justify-end space-x-3 pt-4">
           <Button variant="outline" onClick={onClose} disabled={loading} type="button">
             Cancel

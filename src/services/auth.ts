@@ -177,7 +177,7 @@ export const authService = {
     phone?: string;
   }): Promise<Admin> {
     try {
-      const password_hash = btoa(adminData.password); // Simple encoding for demo
+      const password_hash = btoa(adminData.password.trim()); // Simple encoding for demo
       const { data: admin, error } = await supabase
         .from('admins')
         .insert({
@@ -225,24 +225,78 @@ export const authService = {
   // Add password verification for admin
   async verifyAdminPassword(adminId: string, password: string): Promise<boolean> {
     // In production, use bcrypt.compare
-    console.log('[DEBUG] verifyAdminPassword called with:', { adminId, password });
-    const { data: admin, error } = await supabase
-      .from('admins')
-      .select('password_hash')
-      .eq('id', adminId)
-      .single();
-    console.log('[DEBUG] Admin query result:', { admin, error });
-    if (error || !admin) {
-      console.log('[DEBUG] Admin not found or error:', error);
+    try {
+      if (!adminId || !password) {
+        console.log('[DEBUG] verifyAdminPassword: Missing adminId or password');
+        return false;
+      }
+      
+      // Trim the password input
+      const trimmedPassword = password.trim();
+      
+      console.log('[DEBUG] verifyAdminPassword called with:', { 
+        adminId, 
+        passwordLength: trimmedPassword.length,
+        passwordPreview: trimmedPassword.substring(0, 1) + '***' 
+      });
+      
+      const { data: admin, error } = await supabase
+        .from('admins')
+        .select('password_hash, email')
+        .eq('id', adminId)
+        .single();
+      
+      console.log('[DEBUG] Admin query result:', { 
+        found: !!admin, 
+        email: admin?.email,
+        hasHash: !!admin?.password_hash,
+        hashLength: admin?.password_hash?.length,
+        error: error?.message 
+      });
+      
+      if (error || !admin) {
+        console.log('[DEBUG] Admin not found or error:', error);
+        return false;
+      }
+      
+      if (!admin.password_hash) {
+        console.log('[DEBUG] Admin has no password_hash');
+        return false;
+      }
+      
+      // Try with trimmed password first (most common case)
+      const hashedPasswordTrimmed = btoa(trimmedPassword);
+      const storedHash = admin.password_hash.trim();
+      
+      // Also try without trimming the stored hash (in case it wasn't trimmed when stored)
+      const storedHashUntrimmed = admin.password_hash;
+      
+      // Try with untrimmed password (fallback)
+      const hashedPasswordUntrimmed = btoa(password);
+      
+      const matchTrimmed = storedHash === hashedPasswordTrimmed;
+      const matchUntrimmed = storedHashUntrimmed === hashedPasswordUntrimmed;
+      const matchTrimmedStored = storedHash === hashedPasswordUntrimmed;
+      const matchUntrimmedStored = storedHashUntrimmed === hashedPasswordTrimmed;
+      
+      const finalMatch = matchTrimmed || matchUntrimmed || matchTrimmedStored || matchUntrimmedStored;
+      
+      console.log('[DEBUG] Password comparison:', { 
+        storedHashLength: storedHash.length, 
+        computedHashTrimmedLength: hashedPasswordTrimmed.length,
+        computedHashUntrimmedLength: hashedPasswordUntrimmed.length,
+        matchTrimmed,
+        matchUntrimmed,
+        matchTrimmedStored,
+        matchUntrimmedStored,
+        finalMatch
+      });
+      
+      return finalMatch;
+    } catch (err) {
+      console.error('[DEBUG] verifyAdminPassword error:', err);
       return false;
     }
-    const hashedPassword = btoa(password);
-    console.log('[DEBUG] Password comparison:', { 
-      storedHash: admin.password_hash, 
-      computedHash: hashedPassword, 
-      match: admin.password_hash === hashedPassword 
-    });
-    return admin.password_hash === hashedPassword;
   },
 
   validateToken(token: string): boolean {

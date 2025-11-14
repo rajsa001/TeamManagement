@@ -5,6 +5,7 @@ import Button from '../ui/Button';
 import { User } from 'lucide-react';
 import { authService } from '../../services/auth';
 import Modal from '../ui/Modal';
+import PasswordInput from '../ui/PasswordInput';
 
 const AdminProfile: React.FC = () => {
   const { user, setUser } = useAuth();
@@ -246,25 +247,22 @@ const AdminProfile: React.FC = () => {
           className="space-y-4"
         >
           {passwordError && <div className="p-2 bg-red-100 text-red-700 rounded">{passwordError}</div>}
-          <input
-            className="w-full border rounded px-3 py-2"
-            type="password"
+          <PasswordInput
+            className="border rounded px-3 py-2"
             placeholder="Current Password"
             value={passwordForm.current}
             onChange={e => setPasswordForm(f => ({ ...f, current: e.target.value }))}
             required
           />
-          <input
-            className="w-full border rounded px-3 py-2"
-            type="password"
+          <PasswordInput
+            className="border rounded px-3 py-2"
             placeholder="New Password"
             value={passwordForm.new}
             onChange={e => setPasswordForm(f => ({ ...f, new: e.target.value }))}
             required
           />
-          <input
-            className="w-full border rounded px-3 py-2"
-            type="password"
+          <PasswordInput
+            className="border rounded px-3 py-2"
             placeholder="Confirm New Password"
             value={passwordForm.confirm}
             onChange={e => setPasswordForm(f => ({ ...f, confirm: e.target.value }))}

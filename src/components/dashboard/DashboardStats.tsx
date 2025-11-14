@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Clock, AlertTriangle, Calendar } from 'lucide-react';
+import { CheckCircle, Clock, AlertTriangle, Calendar, BarChart3 } from 'lucide-react';
 import { Task, Leave } from '../../types';
 import Card from '../ui/Card';
 
@@ -21,9 +21,17 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ tasks, leaves }) => {
     const due = new Date(task.due_date);
     return (task.status !== 'completed' && due < today) || task.status === 'blocked';
   }).length;
-  const totalLeaves = leaves.length;
+  const pendingTasks = tasks.filter(task => task.status !== 'completed').length;
+  const allTasks = tasks.length;
 
   const stats = [
+    {
+      label: 'All Tasks',
+      value: allTasks,
+      icon: BarChart3,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100'
+    },
     {
       label: 'Completed Tasks',
       value: completedTasks,
@@ -53,16 +61,16 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ tasks, leaves }) => {
       bgColor: 'bg-red-100'
     },
     {
-      label: 'Total Leaves',
-      value: totalLeaves,
-      icon: Calendar,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100'
+      label: 'Pending Tasks',
+      value: pendingTasks,
+      icon: Clock,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100'
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

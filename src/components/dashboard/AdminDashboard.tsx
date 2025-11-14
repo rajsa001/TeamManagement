@@ -38,6 +38,7 @@ import { MemberDailyTaskStats } from './MemberDailyTaskStats';
 import { DailyTaskQuickStats } from './DailyTaskQuickStats';
 import { TaskQuickStats } from './TaskQuickStats';
 import { WebhookSettings } from './WebhookSettings';
+import PasswordInput from '../ui/PasswordInput';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -160,7 +161,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
 };
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [admins, setAdmins] = useState<{ id: string; name: string }[]>([]);
-  const [projectManagers, setProjectManagers] = useState<{ id: string; name: string }[]>([]);
+  const [projectManagers, setProjectManagers] = useState<{ id: string; name: string; email?: string }[]>([]);
   const [projectManagerAssignments, setProjectManagerAssignments] = useState<Array<{ project_id: string; project_manager_id: string }>>([]);
   const [openSections, setOpenSections] = useState({
     recentlyCompleted: false,
@@ -257,7 +258,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
       if (isMounted) {
         setMembers(membersData.map(m => ({ id: m.id, name: m.name })));
         setAdmins(adminsData.map(a => ({ id: a.id, name: a.name })));
-        setProjectManagers(projectManagersData.map(pm => ({ id: pm.id, name: pm.name })));
+        setProjectManagers(projectManagersData.map(pm => ({ id: pm.id, name: pm.name, email: pm.email })));
       }
     };
     fetchMembersAndAdmins();
@@ -390,131 +391,132 @@ const handleDeleteHoliday = async (holidayId: string) => {
   }, [user?.role, refetchTasks]);
 
   // Initialize chat popup for admin dashboard
-  useEffect(() => {
-    if (user?.role === 'admin') {
-      // Create and inject the UMD script first
-      const umdScript = document.createElement('script');
-      umdScript.src = 'https://cdn.n8nchatui.com/v1/embed.umd.js';
-      umdScript.onload = () => {
-        // After UMD script loads, create and inject the initialization script
-        const initScript = document.createElement('script');
-        initScript.innerHTML = `
-          window.Chatbot.init({
-            "n8nChatUrl": "https://n8nautomation.site/webhook/8c026208-62f6-4df9-8e09-8dc959e78e34/chat",
-            "metadata": {}, // Include any custom data to send with each message to your n8n workflow
-            "theme": {
-              "button": {
-                "backgroundColor": "#00081d",
-                "right": 20,
-                "bottom": 20,
-                "size": 50,
-                "iconColor": "#119cff",
-                "customIconSrc": "https://mmadclhbsuvkcbibxcsp.supabase.co/storage/v1/object/public/avatars//357f28f4-9993-4f63-b609-c31f60111133_1752589383843.png",
-                "customIconSize": 60,
-                "customIconBorderRadius": 15,
-                "autoWindowOpen": {
-                  "autoOpen": false,
-                  "openDelay": 2
-                },
-                "borderRadius": "rounded"
-              },
-              "tooltip": {
-                "showTooltip": true,
-                "tooltipMessage": "🚀 Ready to unlock some AI magic?",
-                "tooltipBackgroundColor": "#119cff",
-                "tooltipTextColor": "#f9faff",
-                "tooltipFontSize": 15
-              },
-              "chatWindow": {
-                "borderRadiusStyle": "rounded",
-                "avatarBorderRadius": 20,
-                "messageBorderRadius": 6,
-                "showTitle": true,
-                "title": "SuperBot 🚀",
-                "titleAvatarSrc": "https://mmadclhbsuvkcbibxcsp.supabase.co/storage/v1/object/public/avatars//357f28f4-9993-4f63-b609-c31f60111133_1752589383843.png",
-                "avatarSize": 30,
-                "welcomeMessage": " Hey there! I'm Superbot, your AI assistant from Tasknova.",
-                "errorMessage": "Please connect me to n8n first",
-                "backgroundColor": "#010c27",
-                "height": 600,
-                "width": 400,
-                "fontSize": 16,
-                "starterPrompts": [
-                  "What are today's tasks ?"
-                ],
-                "starterPromptFontSize": 15,
-                "renderHTML": false,
-                "clearChatOnReload": false,
-                "showScrollbar": false,
-                "botMessage": {
-                  "backgroundColor": "#119cff",
-                  "textColor": "#fafafa",
-                  "showAvatar": true,
-                  "avatarSrc": "https://mmadclhbsuvkcbibxcsp.supabase.co/storage/v1/object/public/avatars//357f28f4-9993-4f63-b609-c31f60111133_1752589895884.gif"
-                },
-                "userMessage": {
-                  "backgroundColor": "#fff6f3",
-                  "textColor": "#050505",
-                  "showAvatar": true,
-                  "avatarSrc": "https://www.svgrepo.com/show/532363/user-alt-1.svg"
-                },
-                "textInput": {
-                  "placeholder": "Type your query",
-                  "backgroundColor": "#119cff",
-                  "textColor": "#fff6f3",
-                  "sendButtonColor": "#01061b",
-                  "maxChars": 50,
-                  "maxCharsWarningMessage": "You exceeded the characters limit. Please input less than 50 characters.",
-                  "autoFocus": true,
-                  "borderRadius": 6,
-                  "sendButtonBorderRadius": 50
-                },
-                "uploadsConfig": {
-                  "enabled": true,
-                  "acceptFileTypes": [
-                    "png",
-                    "jpeg",
-                    "jpg",
-                    "pdf",
-                    "txt"
-                  ],
-                  "maxSizeInMB": 5,
-                  "maxFiles": 1
-                },
-                "voiceInputConfig": {
-                  "enabled": true,
-                  "maxRecordingTime": 15,
-                  "recordingNotSupportedMessage": "To record audio, use modern browsers like Chrome or Firefox that support audio recording"
-                }
-              }
-            }
-          });
-        `;
-        document.head.appendChild(initScript);
-      };
+  // Commented out to hide AI button
+  // useEffect(() => {
+  //   if (user?.role === 'admin') {
+  //     // Create and inject the UMD script first
+  //     const umdScript = document.createElement('script');
+  //     umdScript.src = 'https://cdn.n8nchatui.com/v1/embed.umd.js';
+  //     umdScript.onload = () => {
+  //       // After UMD script loads, create and inject the initialization script
+  //       const initScript = document.createElement('script');
+  //       initScript.innerHTML = `
+  //         window.Chatbot.init({
+  //           "n8nChatUrl": "https://n8nautomation.site/webhook/8c026208-62f6-4df9-8e09-8dc959e78e34/chat",
+  //           "metadata": {}, // Include any custom data to send with each message to your n8n workflow
+  //           "theme": {
+  //             "button": {
+  //               "backgroundColor": "#00081d",
+  //               "right": 20,
+  //               "bottom": 20,
+  //               "size": 50,
+  //               "iconColor": "#119cff",
+  //               "customIconSrc": "https://mmadclhbsuvkcbibxcsp.supabase.co/storage/v1/object/public/avatars//357f28f4-9993-4f63-b609-c31f60111133_1752589383843.png",
+  //               "customIconSize": 60,
+  //               "customIconBorderRadius": 15,
+  //               "autoWindowOpen": {
+  //                 "autoOpen": false,
+  //                 "openDelay": 2
+  //               },
+  //               "borderRadius": "rounded"
+  //             },
+  //             "tooltip": {
+  //               "showTooltip": true,
+  //               "tooltipMessage": "🚀 Ready to unlock some AI magic?",
+  //               "tooltipBackgroundColor": "#119cff",
+  //               "tooltipTextColor": "#f9faff",
+  //               "tooltipFontSize": 15
+  //             },
+  //             "chatWindow": {
+  //               "borderRadiusStyle": "rounded",
+  //               "avatarBorderRadius": 20,
+  //               "messageBorderRadius": 6,
+  //               "showTitle": true,
+  //               "title": "SuperBot 🚀",
+  //               "titleAvatarSrc": "https://mmadclhbsuvkcbibxcsp.supabase.co/storage/v1/object/public/avatars//357f28f4-9993-4f63-b609-c31f60111133_1752589383843.png",
+  //               "avatarSize": 30,
+  //               "welcomeMessage": " Hey there! I'm Superbot, your AI assistant from Tasknova.",
+  //               "errorMessage": "Please connect me to n8n first",
+  //               "backgroundColor": "#010c27",
+  //               "height": 600,
+  //               "width": 400,
+  //               "fontSize": 16,
+  //               "starterPrompts": [
+  //                 "What are today's tasks ?"
+  //               ],
+  //               "starterPromptFontSize": 15,
+  //               "renderHTML": false,
+  //               "clearChatOnReload": false,
+  //               "showScrollbar": false,
+  //               "botMessage": {
+  //                 "backgroundColor": "#119cff",
+  //                 "textColor": "#fafafa",
+  //                 "showAvatar": true,
+  //                 "avatarSrc": "https://mmadclhbsuvkcbibxcsp.supabase.co/storage/v1/object/public/avatars//357f28f4-9993-4f63-b609-c31f60111133_1752589895884.gif"
+  //               },
+  //               "userMessage": {
+  //                 "backgroundColor": "#fff6f3",
+  //                 "textColor": "#050505",
+  //                 "showAvatar": true,
+  //                 "avatarSrc": "https://www.svgrepo.com/show/532363/user-alt-1.svg"
+  //               },
+  //               "textInput": {
+  //                 "placeholder": "Type your query",
+  //                 "backgroundColor": "#119cff",
+  //                 "textColor": "#fff6f3",
+  //                 "sendButtonColor": "#01061b",
+  //                 "maxChars": 50,
+  //                 "maxCharsWarningMessage": "You exceeded the characters limit. Please input less than 50 characters.",
+  //                 "autoFocus": true,
+  //                 "borderRadius": 6,
+  //                 "sendButtonBorderRadius": 50
+  //               },
+  //               "uploadsConfig": {
+  //                 "enabled": true,
+  //                 "acceptFileTypes": [
+  //                   "png",
+  //                   "jpeg",
+  //                   "jpg",
+  //                   "pdf",
+  //                   "txt"
+  //                 ],
+  //                 "maxSizeInMB": 5,
+  //                 "maxFiles": 1
+  //               },
+  //               "voiceInputConfig": {
+  //                 "enabled": true,
+  //                 "maxRecordingTime": 15,
+  //                 "recordingNotSupportedMessage": "To record audio, use modern browsers like Chrome or Firefox that support audio recording"
+  //               }
+  //             }
+  //           }
+  //         });
+  //       `;
+  //       document.head.appendChild(initScript);
+  //     };
       
-      // Append the UMD script to the document head
-      document.head.appendChild(umdScript);
+  //     // Append the UMD script to the document head
+  //     document.head.appendChild(umdScript);
       
-      // Cleanup function to remove the scripts when component unmounts
-      return () => {
-        // Remove UMD script
-        if (document.head.contains(umdScript)) {
-          document.head.removeChild(umdScript);
-        }
-        // Remove init script
-        const initScripts = document.querySelectorAll('script');
-        initScripts.forEach(script => {
-          if (script.innerHTML.includes('window.Chatbot.init')) {
-            document.head.removeChild(script);
-          }
-        });
-        // Also remove any chat elements that might have been created
-        const chatElements = document.querySelectorAll('[data-n8n-chat]');
-        chatElements.forEach(element => element.remove());
-      };
-    }
-  }, [user]);
+  //     // Cleanup function to remove the scripts when component unmounts
+  //     return () => {
+  //       // Remove UMD script
+  //       if (document.head.contains(umdScript)) {
+  //         document.head.removeChild(umdScript);
+  //       }
+  //       // Remove init script
+  //       const initScripts = document.querySelectorAll('script');
+  //       initScripts.forEach(script => {
+  //         if (script.innerHTML.includes('window.Chatbot.init')) {
+  //           document.head.removeChild(script);
+  //         }
+  //       });
+  //       // Also remove any chat elements that might have been created
+  //       const chatElements = document.querySelectorAll('[data-n8n-chat]');
+  //       chatElements.forEach(element => element.remove());
+  //     };
+  //   }
+  // }, [user]);
 
   // --- Admin notifications state and logic (mirroring member dashboard) ---
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
@@ -1646,82 +1648,11 @@ const handleDeleteHoliday = async (holidayId: string) => {
                   {expandedMember === pm.id && (
                     <div className="p-4 border-t mt-2">
                       <div className="mb-2 font-medium text-gray-700">Leave Balances ({new Date().getFullYear()}):</div>
-                      {balances ? (
-                        <div className="flex gap-4 items-center mb-4">
-                          {isSuperAdmin && editingBalances[pm.id] ? (
-                            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                              <label className="flex items-center gap-1">
-                                <span className="text-xs text-gray-600">Sick</span>
-                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[pm.id]?.sick_leaves ?? balances?.sick_leave ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [pm.id]: { ...prev[pm.id], sick_leaves: +e.target.value } }))} />
-                              </label>
-                              <label className="flex items-center gap-1">
-                                <span className="text-xs text-gray-600">Casual</span>
-                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[pm.id]?.casual_leaves ?? balances?.casual_leave ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [pm.id]: { ...prev[pm.id], casual_leaves: +e.target.value } }))} />
-                              </label>
-                              <label className="flex items-center gap-1">
-                                <span className="text-xs text-gray-600">Earned</span>
-                                <input type="number" className="border rounded px-2 py-1 w-20" value={balancesInput[pm.id]?.paid_leaves ?? balances?.earned_leave ?? 30} onChange={e => setBalancesInput((prev: any) => ({ ...prev, [pm.id]: { ...prev[pm.id], paid_leaves: +e.target.value } }))} />
-                              </label>
-                              <div className="flex gap-2 ml-2 mt-2 md:mt-0">
-                                <Button size="sm" variant="primary" onClick={async () => {
-                                  setSavingMemberId(pm.id);
-                                  const input = balancesInput[pm.id];
-                                  const { error } = await supabase
-                                    .from('project_manager_leave_balances')
-                                    .upsert({
-                                      project_manager_id: pm.id,
-                                      year: year,
-                                      sick_leave: input.sick_leaves,
-                                      casual_leave: input.casual_leaves,
-                                      earned_leave: input.paid_leaves,
-                                      updated_at: new Date().toISOString(),
-                                    }, { onConflict: 'project_manager_id,year' });
-                                  if (!error) {
-                                    toast('✅ Leave balances updated', { style: { background: '#10b981', color: 'white' }, duration: 3000 });
-                                  } else {
-                                    toast('❌ Failed to update leave balances', { style: { background: '#ef4444', color: 'white' }, duration: 4000 });
-                                  }
-                                  setEditingBalances((prev) => ({ ...prev, [pm.id]: false }));
-                                  setLeaveBalancesLoading(true);
-                                  const [memberRes, pmRes] = await Promise.all([
-                                    supabase.from('member_leave_balances').select('*'),
-                                    supabase.from('project_manager_leave_balances').select('*')
-                                  ]);
-                                  setLeaveBalances(memberRes.data || []);
-                                  setPmLeaveBalances(pmRes.data || []);
-                                  setLeaveBalancesLoading(false);
-                                  setSavingMemberId(null);
-                                }} disabled={savingMemberId === pm.id}>
-                                  {savingMemberId === pm.id ? 'Saving...' : 'Save'}
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => setEditingBalances((prev) => ({ ...prev, [pm.id]: false }))} disabled={savingMemberId === pm.id}>Cancel</Button>
-                              </div>
-                              <div className="text-xs text-gray-500 mt-2 w-full">These values override the default for this project manager for the year.</div>
-                            </div>
-                          ) : (
-                            <>
-                              <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances.sick_leave}</span>
-                              <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances.casual_leave}</span>
-                              <span className="px-2 py-1 bg-green-50 rounded">Earned: {balances.earned_leave}</span>
-                              {isSuperAdmin && (
-                                <Button size="sm" variant="outline" onClick={() => {
-                                  setEditingBalances((prev) => ({ ...prev, [pm.id]: true }));
-                                  setBalancesInput((prev: any) => ({ 
-                                    ...prev, 
-                                    [pm.id]: { 
-                                      sick_leaves: balances.sick_leave, 
-                                      casual_leaves: balances.casual_leave, 
-                                      paid_leaves: balances.earned_leave 
-                                    } 
-                                  }));
-                                }}>Edit</Button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-gray-500">No balance record for this year.</div>
-                      )}
+                      <div className="flex gap-4 items-center mb-4">
+                        <span className="px-2 py-1 bg-blue-50 rounded">Sick: {balances?.sick_leave ?? leaveDefaults.sick_leaves}</span>
+                        <span className="px-2 py-1 bg-yellow-50 rounded">Casual: {balances?.casual_leave ?? leaveDefaults.casual_leaves}</span>
+                        <span className="px-2 py-1 bg-green-50 rounded">Earned: {balances?.earned_leave ?? leaveDefaults.paid_leaves}</span>
+                      </div>
                       <div className="mb-2 font-medium text-gray-700">Leave History:</div>
                       <div className="space-y-2">
                         {pmLeaves.length === 0 ? (
@@ -2082,7 +2013,7 @@ const handleDeleteHoliday = async (holidayId: string) => {
                 <option value="">No Project Manager (Unassigned)</option>
                 {projectManagers.map(pm => (
                   <option key={pm.id} value={pm.id}>
-                    {pm.name}
+                    {pm.name ? `${pm.name}${pm.email ? ` (${pm.email})` : ''}` : pm.email || 'Unknown Project Manager'}
                   </option>
                 ))}
               </select>
@@ -2268,25 +2199,22 @@ const handleDeleteHoliday = async (holidayId: string) => {
             className="space-y-4"
           >
             {passwordError && <div className="p-2 bg-red-100 text-red-700 rounded">{passwordError}</div>}
-            <input
-              className="w-full border rounded px-3 py-2"
-              type="password"
+            <PasswordInput
+              className="border rounded px-3 py-2"
               placeholder="Current Password"
               value={passwordForm.current}
               onChange={e => setPasswordForm(f => ({ ...f, current: e.target.value }))}
               required
             />
-            <input
-              className="w-full border rounded px-3 py-2"
-              type="password"
+            <PasswordInput
+              className="border rounded px-3 py-2"
               placeholder="New Password"
               value={passwordForm.new}
               onChange={e => setPasswordForm(f => ({ ...f, new: e.target.value }))}
               required
             />
-            <input
-              className="w-full border rounded px-3 py-2"
-              type="password"
+            <PasswordInput
+              className="border rounded px-3 py-2"
               placeholder="Confirm New Password"
               value={passwordForm.confirm}
               onChange={e => setPasswordForm(f => ({ ...f, confirm: e.target.value }))}
